@@ -5,7 +5,8 @@
 # Enforces the machine-checkable invariants of docs/sdd/live-view/spec.md:
 #   D7 - no throw/try/catch in platforms/shared/desktop/liveview/
 #   D5 - the embedded viewer page references no external http(s) resources
-#   D1 - no new entries below platforms/shared/dependencies/ (no new dependencies)
+#   D1 - no entries below platforms/shared/dependencies/ beyond the approved
+#        baseline (no new dependencies), whether committed, staged or untracked
 #
 # Exits 0 when every invariant holds, non-zero with a naming message otherwise.
 
@@ -102,6 +103,30 @@ check_no_external_resources()
 }
 
 # D1 - no new dependencies below platforms/shared/dependencies/.
+#
+# The check compares the entries below that directory against the fixed baseline
+# of dependencies present at plan approval (2026-08-30). A committed entry is as
+# much a new dependency as an untracked one, so both the working tree and the git
+# index are enumerated.
+deps_baseline="glad imgui json mINI miniz stb"
+
+deps_entries()
+{
+    local path name
+
+    find "$deps_dir" -mindepth 1 -maxdepth 1 | while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        printf '%s\n' "${path##*/}"
+    done
+
+    git -C "$repo_root" ls-files --cached --others --exclude-standard \
+        -- platforms/shared/dependencies | while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        name="${path#platforms/shared/dependencies/}"
+        printf '%s\n' "${name%%/*}"
+    done
+}
+
 check_no_new_dependencies()
 {
     if [ ! -d "$deps_dir" ]; then
@@ -114,17 +139,16 @@ check_no_new_dependencies()
         return
     fi
 
-    local new_entries entry
-    new_entries="$(git -C "$repo_root" ls-files --others --exclude-standard \
-        -- platforms/shared/dependencies)"
-    if [ -z "$new_entries" ]; then
-        return
-    fi
-
+    local entry
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
-        fail "D1" "new dependency entry not in the committed tree: $entry"
-    done <<< "$new_entries"
+        case " $deps_baseline " in
+            *" $entry "*)
+                continue
+                ;;
+        esac
+        fail "D1" "new dependency entry below platforms/shared/dependencies/: $entry (baseline: $deps_baseline)"
+    done <<< "$(deps_entries | LC_ALL=C sort -u)"
 }
 
 check_no_exceptions
