@@ -36,6 +36,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/emu.cpp \
     $(DESKTOP_SRC_DIR)/link_cable/link_cable_manager.cpp \
     $(DESKTOP_SRC_DIR)/liveview/liveview_crypto.cpp \
+    $(DESKTOP_SRC_DIR)/liveview/liveview_ws.cpp \
     $(DESKTOP_SRC_DIR)/rewind.cpp \
     $(DESKTOP_SRC_DIR)/runahead.cpp \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
