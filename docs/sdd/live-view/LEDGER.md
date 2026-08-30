@@ -1,13 +1,13 @@
 # live-view — Ledger
 
-**Lease:** session_0143mRxmbctLNYLWy7bSS9gp | 2026-08-30T17:28:39+00:00
+**Lease:** unleased (run abgeschlossen 2026-08-30; alle 10 Tasks done, finaler Review APPROVE_WITH_FINDINGS)
 *(`unleased` at init — `sdd:plan` never writes a session id; format when held:
 `<session-id> | <ISO timestamp>` — stale after 2h, taken/refreshed/cleared only by
 `sdd:run`, spec §6)*
 **Session model:** fable (above recommended orchestrator tier `opus` — cost signal noted to user)
 
 **Plan:** docs/sdd/live-view/plan.md — **approved (2026-08-30)**.
-**Budget:** 1.2 of 6h (provisional)
+**Budget:** 1.6 of 6h (provisional) — final
 **Checkpoints:** sdd/live-view/phase-1 @ 0d5ad7da; sdd/live-view/phase-2 @ 0fb299e1; sdd/live-view/phase-3 @ 2828974c
 
 | ID | Status | Class | Model used | Commits | Deviations | Parked findings | Escalations | Rounds | Fix-passes | Dispatches | Wall-clock | Diff |
@@ -21,7 +21,7 @@
 | T7 | done | S | opus | 94fa7a6f | Probe prüft zusätzlich T6-Observables (Helpflags, 404, kein Listener ohne Flag) | Pre-existing: 4× LTO-Warnung Processor_inline.h (@upstream); ALSA-Fehlerzeile bei headless im Container. Review r2: [Notable] BroadcastStatus konsumiert Status auch ohne Clients (liveview_server.cpp:662) — Late-Joiner bekommt nie media-Block; [Notable] ohne ROM streamt publish uninitialisierten Heap als PNG (emu.cpp:109/1196, lokale Memory-Disclosure); beide → Fix-Pass an finaler Boundary. 1× unreproduzierter Probe-Flake im Reviewer-Harness (4× grün) | — | 0 | 0 | d2; review r2 (fable): APPROVE_WITH_FINDINGS | 20 (batch of 3) | 305 |
 | T8 | done | M | opus | 364df045 | seq zählt akzeptierte set_agent_status-Calls (D3+D4+T9-Reconciliation, Frames können seq wiederholen); live_view_sanitize durch echtes JSON-Escaping ersetzt; Bestätigung trägt length/truncated/seq/ts/running; Status-Store header-only (Makefile.sources außerhalb Task-Scope) | set_agent_status ohne Router-Kategorie (mcp_tool_registry.cpp, nur --mcp-router betroffen); D3-Wortlaut „seq streng monoton" vs. Frame-Wiederholung → Spec-Frage | — | 0 | 0 | d3 | — | 429 |
 | T9 | done | M | opus | 99b4900e | Seite zeigt zusätzlich Media-Titel+Paused und WxH/Framezähler | — | — | 0 | 0 | d3 | — | 378 |
-| T10 | done | S | opus | 5e2466c9 | — | Build ohne Header-Dependency-Tracking (-MMD fehlt; Header-Edit ⇒ kein Rebuild); Late-Join ohne Status = Review-r2-Finding 1. Diff 483 ≫ S-Budget 150 (Kalibrierung) | — | 0 | 0 | d3 | 24 (batch of 3) | 483 |
+| T10 | done | S | opus | 5e2466c9 | — | Build ohne Header-Dependency-Tracking (-MMD fehlt; Header-Edit ⇒ kein Rebuild); Late-Join ohne Status = Review-r2-Finding 1. Diff 483 ≫ S-Budget 150 (Kalibrierung). Review r3: [Notable] D3-Wortlaut vs. seq-Semantik → per Spec-Amendment 2026-08-30 geschlossen; [Cosmetic] drawFrame ohne Bild-Sequencing (stale Frame möglich, ~20fps localhost unkritisch) | — | 0 | 0 | d3; review r3 (fable): APPROVE_WITH_FINDINGS | 24 (batch of 3) | 483 |
 
 ## Amendments
 
@@ -30,3 +30,4 @@
 - 2026-08-30: Spec D2 „RGBA"→RGB (mechanisch, GB_Color ist 3 Bytes); Plan T5 gleichlautend.
 - 2026-08-30: Guard-Korrektur D1-Baseline-Check autorisiert (Phase-1-Review Notable); Umsetzung im Phase-2-Fix-Pass.
 - 2026-08-30: Spec D3 `size` korrigiert auf 1..4 Bytes (mechanisch; Debugger registriert 8–32-Bit-Watches).
+- 2026-08-30: Spec D3 seq-Semantik dokumentiert (zählt Agent-Posts; Frames wiederholen seq) — schließt das Notable des finalen Reviews.

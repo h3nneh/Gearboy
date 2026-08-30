@@ -104,3 +104,10 @@ Eigenschaften.
   Kanalzahl als Parameter. Keine Verhaltensänderung.
 - **2026-08-30 — D3, mechanische Korrektur:** `"size":<1|2>` ist zu eng — der Debugger
   registriert 8/16/24/32-Bit-Watches; `size` ist die Breite in Bytes, `1..4`.
+- **2026-08-30 — D3, seq-Semantik (dokumentiert die ausgelieferte, im finalen Gate
+  geprüfte Reconciliation von D3+D4+T9):** `seq` zählt akzeptierte
+  `set_agent_status`-Calls. Es fällt nie; Status-Frames, die wegen Watch-/Input-/
+  Media-Änderungen gepusht werden, wiederholen die letzte `seq`. „Wächst streng
+  monoton" bezieht sich auf aufeinanderfolgende Agent-Posts, nicht auf jeden Frame —
+  sonst würde die Viewer-Historie (Dedup über `seq`, D5/T9) denselben Text
+  duplizieren. Finaler Review (Phase 3) hat diese Semantik on-the-wire verifiziert.
