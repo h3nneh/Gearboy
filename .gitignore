@@ -86,3 +86,8 @@ platforms/libretro/libs/
 
 #JetBrains
 .idea
+
+# live-view fork: sdd initiative artifacts are tracked
+!docs/
+docs/*
+!docs/sdd/
