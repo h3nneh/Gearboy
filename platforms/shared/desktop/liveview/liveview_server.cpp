@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <chrono>
+#include "liveview_page.h"
 #include "liveview_ws.h"
 #include "log.h"
 #include "stb_image_write.h"
@@ -72,13 +73,6 @@ struct LiveviewClient
     size_t send_offset;
     LiveviewWsDecoder decoder;
 };
-
-static const char* const k_liveview_placeholder_page =
-    "<!DOCTYPE html>\n"
-    "<html lang=\"en\">\n"
-    "<head><meta charset=\"utf-8\"><title>Gearboy Live View</title></head>\n"
-    "<body><p>Gearboy live view placeholder page.</p></body>\n"
-    "</html>\n";
 
 static bool LiveviewWouldBlock(void)
 {
@@ -476,7 +470,7 @@ bool LiveviewServer::HandleRequest(LiveviewClient* client)
         }
 
         if (page.empty())
-            page = k_liveview_placeholder_page;
+            page = k_liveview_page;
 
         QueueHttpResponse(client, "200 OK", "text/html; charset=utf-8", page);
         client->close_after_flush = true;
