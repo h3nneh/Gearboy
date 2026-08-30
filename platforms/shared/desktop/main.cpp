@@ -117,6 +117,37 @@ int main(int argc, char* argv[])
                 app_params.mcp_http_address = argv[++i];
                 app_params.mcp_http_address_set = true;
             }
+            else if (strcmp(argv[i], "--live-view") == 0)
+            {
+                app_params.live_view = true;
+            }
+            else if (strcmp(argv[i], "--live-view-port") == 0)
+            {
+                if (i + 1 >= argc || argv[i + 1][0] == '-')
+                {
+                    fprintf(stderr, "Missing value for --live-view-port\n");
+                    return -1;
+                }
+
+                char* end = NULL;
+                long port = strtol(argv[++i], &end, 10);
+                if (!end || *end != '\0' || port <= 0 || port > 65535)
+                {
+                    fprintf(stderr, "Invalid port number: %s\n", argv[i]);
+                    return -1;
+                }
+                app_params.live_view_port = (int)port;
+            }
+            else if (strcmp(argv[i], "--live-view-address") == 0)
+            {
+                if (i + 1 >= argc || argv[i + 1][0] == '-')
+                {
+                    fprintf(stderr, "Missing value for --live-view-address\n");
+                    return -1;
+                }
+
+                app_params.live_view_address = argv[++i];
+            }
             else if (strcmp(argv[i], "--link-cable-join") == 0)
             {
                 if (i + 1 >= argc || argv[i + 1][0] == '-')
@@ -150,6 +181,8 @@ int main(int argc, char* argv[])
     {
         if ((strcmp(argv[i], "--mcp-http-port") == 0) ||
             (strcmp(argv[i], "--mcp-http-address") == 0) ||
+            (strcmp(argv[i], "--live-view-port") == 0) ||
+            (strcmp(argv[i], "--live-view-address") == 0) ||
             (strcmp(argv[i], "--link-cable-join") == 0))
         {
             if (i + 1 < argc)
@@ -195,8 +228,11 @@ int main(int argc, char* argv[])
         printf("      --mcp-router            Enable compact MCP tool routing\n");
         printf("      --mcp-http-address A    HTTP bind address (default: 127.0.0.1)\n");
         printf("      --mcp-http-port N       HTTP port for MCP server (default: 7777)\n");
+        printf("      --live-view             Start the live view server\n");
+        printf("      --live-view-address A   Live view bind address (default: 127.0.0.1)\n");
+        printf("      --live-view-port N      Port for the live view server (default: 7778)\n");
         printf("      --link-cable-join N     Join local link cable session 1-255\n");
-        printf("      --headless              Run without GUI (requires MCP or link cable)\n");
+        printf("      --headless              Run without GUI (requires MCP, live view or link cable)\n");
         printf("      --portable              Store configuration and user data beside the application\n");
         printf("  -v, --version               Display version information\n");
         printf("  -h, --help                  Display this help message\n");

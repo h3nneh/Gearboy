@@ -43,6 +43,9 @@ struct ApplicationParams
     bool mcp_http_address_set = false;
     int link_cable_session = 1;
     bool link_cable_session_set = false;
+    bool live_view = false;
+    int live_view_port = 7778;
+    std::string live_view_address = "127.0.0.1";
 };
 
 EXTERN SDL_Window* application_sdl_window;

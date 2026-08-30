@@ -31,6 +31,7 @@
 #include "gui_debug_trace_logger.h"
 #include "mcp/mcp_manager.h"
 #include "link_cable/link_cable_manager.h"
+#include "liveview/liveview_server.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #if defined(_WIN32)
@@ -51,6 +52,9 @@ static s16* audio_buffer;
 static bool audio_enabled;
 static McpManager* mcp_manager;
 static LinkCableManager* link_cable_manager;
+static LiveviewServer* live_view_server;
+static std::string live_view_status_fields;
+static u64 live_view_status_seq;
 static bool link_cable_applied;
 static float tilt_x = 0.0f;
 static float tilt_y = 0.0f;
@@ -135,6 +139,10 @@ bool emu_init(void)
     mcp_manager = new McpManager();
     mcp_manager->Init(gearboy);
 
+    live_view_server = new LiveviewServer();
+    live_view_status_fields.clear();
+    live_view_status_seq = 0;
+
     rewind_init();
     runahead_init();
 
@@ -161,6 +169,7 @@ void emu_destroy(void)
     save_ram();
     rewind_destroy();
     runahead_destroy();
+    SafeDelete(live_view_server);
     SafeDelete(mcp_manager);
     SafeDelete(link_cable_manager);
 
@@ -1199,6 +1208,75 @@ void emu_mcp_pump_commands(void)
 {
     if (mcp_manager && mcp_manager->IsRunning())
         mcp_manager->PumpCommands(gearboy);
+}
+
+void emu_live_view_start(const char* address, int port)
+{
+    if (live_view_server)
+        live_view_server->Start(address, port);
+}
+
+void emu_live_view_stop(void)
+{
+    if (live_view_server)
+        live_view_server->Stop();
+}
+
+bool emu_live_view_is_running(void)
+{
+    return live_view_server && live_view_server->IsRunning();
+}
+
+// Keeps a JSON string value printable and free of characters that would break
+// the status message.
+static void live_view_sanitize(const char* source, char* destination, int size)
+{
+    int written = 0;
+
+    while (source && (source[written] != 0) && (written < size - 1))
+    {
+        char character = source[written];
+
+        if ((character < 0x20) || (character > 0x7E) || (character == '"') || (character == '\\'))
+            character = ' ';
+
+        destination[written] = character;
+        written++;
+    }
+
+    destination[written] = 0;
+}
+
+void emu_live_view_publish(void)
+{
+    if (!live_view_server || !live_view_server->IsRunning())
+        return;
+
+    GB_RuntimeInfo rt_info;
+    bool rom_loaded = gearboy->GetRuntimeInfo(rt_info);
+
+    live_view_server->PublishFrame(emu_frame_buffer, rt_info.screen_width, rt_info.screen_height, 3);
+
+    char title[64];
+    live_view_sanitize(rom_loaded ? gearboy->GetCartridge()->GetName() : "", title, sizeof(title));
+
+    char fields[256];
+    snprintf(fields, sizeof(fields),
+        "\"agent_text\":\"\",\"agent_ts\":0,"
+        "\"media\":{\"title\":\"%s\",\"paused\":%s,\"width\":%d,\"height\":%d}",
+        title, emu_is_paused() ? "true" : "false", rt_info.screen_width, rt_info.screen_height);
+
+    if (live_view_status_fields != fields)
+    {
+        live_view_status_fields = fields;
+        live_view_status_seq++;
+    }
+
+    char status[320];
+    snprintf(status, sizeof(status), "{\"type\":\"status\",\"seq\":%llu,%s}",
+        (unsigned long long)live_view_status_seq, fields);
+
+    live_view_server->PublishStatus(status);
 }
 
 bool emu_link_cable_connect(int session)

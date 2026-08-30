@@ -161,6 +161,13 @@ int application_init(const ApplicationParams& params)
     if (params.link_cable_session_set)
         emu_link_cable_connect(params.link_cable_session);
 
+    if (params.live_view)
+    {
+        const char* live_view_address = params.live_view_address.empty() ? "127.0.0.1" : params.live_view_address.c_str();
+        Log("Starting live view server (address: %s, port: %d)...", live_view_address, params.live_view_port);
+        emu_live_view_start(live_view_address, params.live_view_port);
+    }
+
     application_refocus_window();
 
     return 0;
@@ -172,6 +179,7 @@ void application_destroy(void)
     macos_remove_dock_menu();
 #endif
 
+    emu_live_view_stop();
     save_window_size();
     ogl_renderer_destroy();
     ImGui_ImplSDL3_Shutdown();
@@ -194,6 +202,7 @@ void application_mainloop(void)
         handle_menu();
         handle_single_instance();
         run_emulator();
+        emu_live_view_publish();
         display_render();
         display_frame_throttle();
     }

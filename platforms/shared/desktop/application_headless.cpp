@@ -40,9 +40,9 @@ int application_headless_init(const ApplicationParams& params)
     Log("\n%s", GEARBOY_TITLE_ASCII);
     Log("%s %s Headless Mode", GEARBOY_TITLE, GEARBOY_VERSION);
 
-    if (params.mcp_mode < 0 && !params.link_cable_session_set)
+    if (params.mcp_mode < 0 && !params.link_cable_session_set && !params.live_view)
     {
-        Error("Headless mode requires MCP or --link-cable-join");
+        Error("Headless mode requires MCP, --live-view or --link-cable-join");
         return 1;
     }
 
@@ -111,6 +111,13 @@ int application_headless_init(const ApplicationParams& params)
     if (params.link_cable_session_set)
         emu_link_cable_connect(params.link_cable_session);
 
+    if (params.live_view)
+    {
+        const char* live_view_address = params.live_view_address.empty() ? "127.0.0.1" : params.live_view_address.c_str();
+        Log("Starting live view server (address: %s, port: %d)...", live_view_address, params.live_view_port);
+        emu_live_view_start(live_view_address, params.live_view_port);
+    }
+
     signal(SIGINT, headless_signal_handler);
     signal(SIGTERM, headless_signal_handler);
 
@@ -119,6 +126,7 @@ int application_headless_init(const ApplicationParams& params)
 
 void application_headless_destroy(void)
 {
+    emu_live_view_stop();
     gui_debug_destroy();
     emu_destroy();
     SDL_Quit();
@@ -135,8 +143,9 @@ void application_headless_mainloop(void)
         emu_update();
         gui_debug_update();
         gui_finish_loading_rom();
+        emu_live_view_publish();
 
-        if (!emu_mcp_is_running() && !emu_link_cable_is_active())
+        if (!emu_mcp_is_running() && !emu_link_cable_is_active() && !emu_live_view_is_running())
         {
             Log("No service running, exiting headless mode");
             break;
