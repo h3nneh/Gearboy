@@ -3,6 +3,7 @@ include Makefile.sources
 SERIAL_TARGET_NAME = gearboy-serial-tests
 LINK_CABLE_WIRE_TARGET_NAME = gearboy-link-cable-wire-tests
 LINK_CABLE_MANAGER_TARGET_NAME = gearboy-link-cable-manager-tests
+LIVEVIEW_CRYPTO_TARGET_NAME = gearboy-liveview-crypto-tests
 GIT_VERSION := $(shell git describe --abbrev=7 --dirty --always --tags)
 UNAME_S := $(shell uname -s)
 PLATFORM = "undefined"
@@ -55,7 +56,7 @@ else
     CXXFLAGS += -std=gnu++11
 endif
 
-all: serial link-cable-wire link-cable-manager
+all: serial link-cable-wire link-cable-manager liveview-crypto
 
 serial: $(SERIAL_TARGET_NAME)
 	@echo Serial tests build complete for $(PLATFORM)
@@ -65,6 +66,9 @@ link-cable-wire: $(LINK_CABLE_WIRE_TARGET_NAME)
 
 link-cable-manager: $(LINK_CABLE_MANAGER_TARGET_NAME)
 	@echo Link cable manager tests build complete for $(PLATFORM)
+
+liveview-crypto: $(LIVEVIEW_CRYPTO_TARGET_NAME)
+	@echo Live view crypto tests build complete for $(PLATFORM)
 
 $(SERIAL_TARGET_NAME): serial_tests.cpp $(OBJECTS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
@@ -77,6 +81,9 @@ $(LINK_CABLE_MANAGER_TARGET_NAME): link_cable_manager_tests.cpp ../platforms/sha
 
 $(LINK_CABLE_MANAGER_TARGET_NAME): CPPFLAGS += -DLINK_CABLE_SHM_PREFIX=\"gearboy-link-tests-\"
 
+$(LIVEVIEW_CRYPTO_TARGET_NAME): liveview_crypto_tests.cpp ../platforms/shared/desktop/liveview/liveview_crypto.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I../platforms/shared/desktop -pthread -o $@ $^ $(LDFLAGS)
+
 %.o: %.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
@@ -84,5 +91,5 @@ $(LINK_CABLE_MANAGER_TARGET_NAME): CPPFLAGS += -DLINK_CABLE_SHM_PREFIX=\"gearboy
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJECTS) $(SERIAL_TARGET_NAME) $(LINK_CABLE_WIRE_TARGET_NAME) $(LINK_CABLE_MANAGER_TARGET_NAME)
-	rm -rf $(SERIAL_TARGET_NAME).dSYM $(LINK_CABLE_WIRE_TARGET_NAME).dSYM $(LINK_CABLE_MANAGER_TARGET_NAME).dSYM
+	rm -f $(OBJECTS) $(SERIAL_TARGET_NAME) $(LINK_CABLE_WIRE_TARGET_NAME) $(LINK_CABLE_MANAGER_TARGET_NAME) $(LIVEVIEW_CRYPTO_TARGET_NAME)
+	rm -rf $(SERIAL_TARGET_NAME).dSYM $(LINK_CABLE_WIRE_TARGET_NAME).dSYM $(LINK_CABLE_MANAGER_TARGET_NAME).dSYM $(LIVEVIEW_CRYPTO_TARGET_NAME).dSYM
