@@ -102,3 +102,5 @@ Eigenschaften.
   RGB (`src/definitions.h`), `emu_get_screenshot_png` encodiert 3 Kanäle. D2 liest sich
   korrekt mit „RGB-Framebuffer (3 Kanäle)"; die T5-Publikationsschnittstelle trägt die
   Kanalzahl als Parameter. Keine Verhaltensänderung.
+- **2026-08-30 — D3, mechanische Korrektur:** `"size":<1|2>` ist zu eng — der Debugger
+  registriert 8/16/24/32-Bit-Watches; `size` ist die Breite in Bytes, `1..4`.
