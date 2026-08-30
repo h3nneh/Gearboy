@@ -274,3 +274,14 @@ implementing side writes the tests.
 ## Amendment Log
 
 <!-- One dated entry per amendment, newest last. Empty until the first amendment lands. -->
+
+- **2026-08-30 — T5-Interfaces, mechanische Korrektur:** „RGBA-Frame-Snapshot" →
+  „RGB-Frame-Snapshot, Kanalzahl als Parameter" (siehe Spec-Amendment zu D2 vom selben
+  Datum; `GB_Color` ist 3 Bytes).
+- **2026-08-30 — Guard-Korrektur autorisiert (Phase-1-Review, Notable):** Der D1-Check in
+  `tests/guards/liveview_guard.sh` prüft nur untracked files (`git ls-files --others`)
+  und ist am Gate — sauberer, committeter Baum — wirkungslos; eine committete neue
+  Dependency passierte ihn. Korrektur: Einträge unter `platforms/shared/dependencies/`
+  gegen die feste Baseline der bei Plan-Approval vorhandenen Verzeichnisse (glad, imgui,
+  json, mINI, miniz, stb) prüfen. Dieses Amendment autorisiert die semantische Änderung
+  am Guard im Phase-2-Fix-Pass.

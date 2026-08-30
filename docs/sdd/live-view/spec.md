@@ -97,3 +97,8 @@ Eigenschaften.
 ## Amendment Log
 
 <!-- One dated entry per amendment, newest last. Empty until the first amendment lands. -->
+
+- **2026-08-30 — D2, mechanische Korrektur:** „RGBA" ist falsch — `GB_Color` ist 3 Bytes
+  RGB (`src/definitions.h`), `emu_get_screenshot_png` encodiert 3 Kanäle. D2 liest sich
+  korrekt mit „RGB-Framebuffer (3 Kanäle)"; die T5-Publikationsschnittstelle trägt die
+  Kanalzahl als Parameter. Keine Verhaltensänderung.
