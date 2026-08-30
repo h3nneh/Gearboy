@@ -106,7 +106,9 @@ static void link_cable_sync_callback(u64 cycle, u32 promise_cycles, void* user_d
 bool emu_init(void)
 {
     frame_buffer_565 = new u16[SGB_SCREEN_WIDTH * SGB_SCREEN_HEIGHT];
-    emu_frame_buffer = new GB_Color[SGB_SCREEN_WIDTH * SGB_SCREEN_HEIGHT];
+    // Value initialized: the buffer is read by screenshots and the live view
+    // before the first rendered frame can fill it.
+    emu_frame_buffer = new GB_Color[SGB_SCREEN_WIDTH * SGB_SCREEN_HEIGHT]();
     init_debug();
     gearboy = new GearboyCore();
     gearboy->Init();
@@ -1292,7 +1294,10 @@ void emu_live_view_publish(void)
     GB_RuntimeInfo rt_info;
     bool rom_loaded = gearboy->GetRuntimeInfo(rt_info);
 
-    live_view_server->PublishFrame(emu_frame_buffer, rt_info.screen_width, rt_info.screen_height, 3);
+    // Without a rom nothing renders into the frame buffer, so there is no image
+    // to stream. The status keeps flowing and reports the empty media block.
+    if (rom_loaded)
+        live_view_server->PublishFrame(emu_frame_buffer, rt_info.screen_width, rt_info.screen_height, 3);
 
     LiveviewAgentStatus agent = liveview_status_get_agent();
 
