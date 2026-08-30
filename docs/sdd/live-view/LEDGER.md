@@ -1,14 +1,14 @@
 # live-view — Ledger
 
-**Lease:** session_0143mRxmbctLNYLWy7bSS9gp | 2026-08-30T16:55:05+00:00
+**Lease:** session_0143mRxmbctLNYLWy7bSS9gp | 2026-08-30T17:28:39+00:00
 *(`unleased` at init — `sdd:plan` never writes a session id; format when held:
 `<session-id> | <ISO timestamp>` — stale after 2h, taken/refreshed/cleared only by
 `sdd:run`, spec §6)*
 **Session model:** fable (above recommended orchestrator tier `opus` — cost signal noted to user)
 
 **Plan:** docs/sdd/live-view/plan.md — **approved (2026-08-30)**.
-**Budget:** 1.0 of 6h (provisional)
-**Checkpoints:** sdd/live-view/phase-1 @ 0d5ad7da; sdd/live-view/phase-2 @ 0fb299e1
+**Budget:** 1.2 of 6h (provisional)
+**Checkpoints:** sdd/live-view/phase-1 @ 0d5ad7da; sdd/live-view/phase-2 @ 0fb299e1; sdd/live-view/phase-3 @ 2828974c
 
 | ID | Status | Class | Model used | Commits | Deviations | Parked findings | Escalations | Rounds | Fix-passes | Dispatches | Wall-clock | Diff |
 |----|--------|-------|------------|---------|------------|------------------|-------------|--------|------------|------------|------------|------|
@@ -16,8 +16,8 @@
 | T2 | done | M | opus | 1e95cd85 | tests/Makefile: neue Targets zusätzlich in all:/clean: | — | — | 0 | 0 | d1 | — | 570 |
 | T3 | done | M | opus | 0d5ad7da | Payload-Cap 4 MiB; zusätzl. RFC-6455-Protokollfehler (RSV, Control-Frames, 64-bit-Länge, Close-Byte); BAD_REQUEST für non-GET/Headerzeile ohne Doppelpunkt; keine Sec-WebSocket-Version-Prüfung; tests/Makefile all:/clean: | Diff 1273 ≫ M-Budget 400 (Kalibrierung) | — | 0 | 0 | d1 | — | 1273 |
 | T4 | done | S | opus | (kein Commit — Gate grün auf committed state) | — | Pre-existing: (1) `make -C tests` solo rot — miniz.c unter -std=c99 (ftello/fseeko), repro @3ae71c08; (2) tests/ und platforms/linux teilen miniz.o mit versch. Flags; (3) Testbinaries nicht gitignored → `-dirty` in --version. Vorschlag: je eigener Task. Review-Findings: [Notable] D1-Guard prüft nur untracked files — behoben im Fix-Pass 0fb299e1. [Cosmetic] D5-Zeilenfilter der GPL-URL könnte externe URL auf derselben Zeile verdecken — nur geloggt | — | 0 | 0 | d1; review r1 (fable): APPROVE_WITH_FINDINGS | 16 (batch of 4) | 0 |
-| T5 | done | M | opus | 11594eed | PublishFrame mit Kanalzahl statt RGBA (Spec-Amendment D2); eingebauter Platzhalter bis SetPage (T8); Unit-Test deckt mehr als Start/Stop ab; stb_image_write-Impl im Testbinary | Diff 1261 ≫ M-Budget 400 (Kalibrierung) | — | 0 | 0 | d2 | — | 1261 |
-| T6 | done | M | opus | d9af734f | --headless-Helptext um „live view" ergänzt; live_view_sanitize für ROM-Titel im Status-JSON; seq inkrementiert nur bei Statusänderung (D3-konform) | Status noch D3-Teilmenge (inputs/watches fehlen — planmäßig, T8) | — | 0 | 0 | d2 | — | 147 |
+| T5 | done | M | opus | 11594eed; 6e454a2f (fix-pass r2#1: Late-Join-Status, +BroadcastStatus-has_listener) | PublishFrame mit Kanalzahl statt RGBA (Spec-Amendment D2); eingebauter Platzhalter bis SetPage (T8); Unit-Test deckt mehr als Start/Stop ab; stb_image_write-Impl im Testbinary | Diff 1261 ≫ M-Budget 400 (Kalibrierung) | — | 0 | 1 | d2; fp2 | — | 1261 |
+| T6 | done | M | opus | d9af734f; 2828974c (fix-pass r2#2: kein Frame ohne ROM, Framebuffer zero-init) | --headless-Helptext um „live view" ergänzt; live_view_sanitize für ROM-Titel im Status-JSON; seq inkrementiert nur bei Statusänderung (D3-konform) | Status noch D3-Teilmenge (inputs/watches fehlen — planmäßig, T8) | — | 0 | 1 | d2; fp2 | — | 147 |
 | T7 | done | S | opus | 94fa7a6f | Probe prüft zusätzlich T6-Observables (Helpflags, 404, kein Listener ohne Flag) | Pre-existing: 4× LTO-Warnung Processor_inline.h (@upstream); ALSA-Fehlerzeile bei headless im Container. Review r2: [Notable] BroadcastStatus konsumiert Status auch ohne Clients (liveview_server.cpp:662) — Late-Joiner bekommt nie media-Block; [Notable] ohne ROM streamt publish uninitialisierten Heap als PNG (emu.cpp:109/1196, lokale Memory-Disclosure); beide → Fix-Pass an finaler Boundary. 1× unreproduzierter Probe-Flake im Reviewer-Harness (4× grün) | — | 0 | 0 | d2; review r2 (fable): APPROVE_WITH_FINDINGS | 20 (batch of 3) | 305 |
 | T8 | done | M | opus | 364df045 | seq zählt akzeptierte set_agent_status-Calls (D3+D4+T9-Reconciliation, Frames können seq wiederholen); live_view_sanitize durch echtes JSON-Escaping ersetzt; Bestätigung trägt length/truncated/seq/ts/running; Status-Store header-only (Makefile.sources außerhalb Task-Scope) | set_agent_status ohne Router-Kategorie (mcp_tool_registry.cpp, nur --mcp-router betroffen); D3-Wortlaut „seq streng monoton" vs. Frame-Wiederholung → Spec-Frage | — | 0 | 0 | d3 | — | 429 |
 | T9 | done | M | opus | 99b4900e | Seite zeigt zusätzlich Media-Titel+Paused und WxH/Framezähler | — | — | 0 | 0 | d3 | — | 378 |
