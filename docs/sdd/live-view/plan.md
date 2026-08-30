@@ -1,7 +1,7 @@
 # live-view — Implementation Plan
 
 **Source spec:** docs/sdd/live-view/spec.md (authoritative; on conflict the spec wins)
-**Status:** draft (pending approval)
+**Status:** approved (2026-08-30)
 **Initiative budget:** 6h (provisional — keine früheren Ledger in diesem Repo)
 
 **No literal implementation or test code in this plan.** Properties say what must hold; the

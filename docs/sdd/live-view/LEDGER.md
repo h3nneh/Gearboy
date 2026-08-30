@@ -6,7 +6,7 @@
 `sdd:run`, spec §6)*
 **Session model:** _written by `sdd:run` at lease-take_
 
-**Plan:** docs/sdd/live-view/plan.md — **pending approval**.
+**Plan:** docs/sdd/live-view/plan.md — **approved (2026-08-30)**.
 **Budget:** 0 of 6h (provisional)
 **Checkpoints:** —
 

@@ -1,6 +1,6 @@
 # live-view — Spec
 
-**Status:** draft (pending approval)
+**Status:** approved (2026-08-30)
 **Date:** 2026-08-30
 **Authority:** this file. Changes land as dated entries in the Amendment Log at the bottom —
 never as silent edits to settled sections. On conflict, the newest amendment wins.
