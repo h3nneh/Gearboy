@@ -62,12 +62,17 @@ struct LiveviewClient
         socket = LIVEVIEW_INVALID_SOCKET;
         websocket = false;
         close_after_flush = false;
+        pending_status = false;
         send_offset = 0;
     }
 
     LiveviewSocket socket;
     bool websocket;
     bool close_after_flush;
+    // Set on the websocket upgrade, cleared once this client has been sent a
+    // status. It makes a client that joins between two status changes receive
+    // the current status instead of waiting for the next one.
+    bool pending_status;
     std::string request;
     std::vector<uint8_t> send_queue;
     size_t send_offset;
@@ -451,6 +456,7 @@ bool LiveviewServer::HandleRequest(LiveviewClient* client)
 
         QueueBytes(client, response.c_str(), response.size());
         client->websocket = true;
+        client->pending_status = true;
 
         std::string pending = client->request.substr(header_size);
         client->request.clear();
@@ -643,17 +649,42 @@ void LiveviewServer::BroadcastFrame(void)
 
     std::vector<uint8_t> frame;
     liveview_ws_encode_frame(LIVEVIEW_WS_OPCODE_BINARY, &png[0], png.size(), frame);
-    BroadcastToClients(frame, true);
+    BroadcastToClients(frame, true, false);
 }
 
 void LiveviewServer::BroadcastStatus(void)
 {
+    bool has_listener = false;
+    bool has_pending = false;
+
+    for (size_t i = 0; i < m_clients.size(); i++)
+    {
+        if (!m_clients[i]->websocket || m_clients[i]->close_after_flush)
+            continue;
+
+        has_listener = true;
+
+        if (m_clients[i]->pending_status)
+            has_pending = true;
+    }
+
+    // Without a listener the snapshot stays unconsumed, so the next client to
+    // connect still sees the status that was published while nobody listened.
+    if (!has_listener)
+        return;
+
     std::string status;
+    bool changed = false;
 
     {
         std::lock_guard<std::mutex> lock(m_snapshot_mutex);
 
-        if ((m_status_seq == m_last_status_seq) || m_status.empty())
+        if (m_status.empty())
+            return;
+
+        changed = (m_status_seq != m_last_status_seq);
+
+        if (!changed && !has_pending)
             return;
 
         status = m_status;
@@ -662,10 +693,17 @@ void LiveviewServer::BroadcastStatus(void)
 
     std::vector<uint8_t> frame;
     liveview_ws_encode_frame(LIVEVIEW_WS_OPCODE_TEXT, status.c_str(), status.size(), frame);
-    BroadcastToClients(frame, false);
+    // An unchanged status goes to the clients that never received one, a
+    // changed status to everybody.
+    BroadcastToClients(frame, false, !changed);
+
+    // Every client that survived the broadcast has the status queued now.
+    for (size_t i = 0; i < m_clients.size(); i++)
+        m_clients[i]->pending_status = false;
 }
 
-void LiveviewServer::BroadcastToClients(const std::vector<uint8_t>& frame, bool droppable)
+void LiveviewServer::BroadcastToClients(const std::vector<uint8_t>& frame, bool droppable,
+    bool only_pending)
 {
     if (frame.empty())
         return;
@@ -676,6 +714,9 @@ void LiveviewServer::BroadcastToClients(const std::vector<uint8_t>& frame, bool 
         LiveviewClient* client = m_clients[index];
 
         if (!client->websocket || client->close_after_flush)
+            continue;
+
+        if (only_pending && !client->pending_status)
             continue;
 
         size_t pending = client->send_queue.size() - client->send_offset;

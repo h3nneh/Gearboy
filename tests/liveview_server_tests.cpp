@@ -22,10 +22,12 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 #include <arpa/inet.h>
 #include <dirent.h>
@@ -401,11 +403,74 @@ static void TestWebsocketStream(void)
     server.Stop();
 }
 
+// A client that connects long after the status was published, and without any
+// further change to it, still receives the current status.
+static void TestLateClientReceivesStatus(void)
+{
+    LiveviewServer server;
+    Check(server.Start("127.0.0.1", 0), "start for the late joining client");
+
+    const std::string status = "{\"type\":\"status\",\"seq\":7}";
+    server.PublishStatus(status);
+
+    // Long enough for several status broadcast intervals to pass with nobody
+    // connected, so the status is not new any more when the client arrives.
+    std::this_thread::sleep_for(std::chrono::milliseconds(4 * LIVEVIEW_STATUS_INTERVAL_MS));
+
+    int socket_fd = OpenWebsocket(server.GetPort(), "dGhlIHNhbXBsZSBub25jZQ==");
+
+    std::vector<uint8_t> payload;
+    uint8_t opcode = LIVEVIEW_WS_OPCODE_BINARY;
+
+    // No frame was ever published here, so nothing but the status can arrive.
+    for (int i = 0; i < 20; i++)
+    {
+        opcode = ReadServerFrame(socket_fd, payload);
+
+        if (opcode == LIVEVIEW_WS_OPCODE_TEXT)
+            break;
+
+        Check(opcode == LIVEVIEW_WS_OPCODE_BINARY, "only images arrive before the status");
+    }
+
+    Check(opcode == LIVEVIEW_WS_OPCODE_TEXT,
+        "a client connecting after the status was published still receives it");
+    Check(std::string((const char*)&payload[0], payload.size()) == status,
+        "the late text frame carries the current status");
+
+    // The status is consumed by now, and this second client joins while the
+    // first one is connected and up to date. It still has to be served.
+    std::this_thread::sleep_for(std::chrono::milliseconds(4 * LIVEVIEW_STATUS_INTERVAL_MS));
+
+    int second_socket_fd = OpenWebsocket(server.GetPort(), "AAECAwQFBgcICQoLDA0ODw==");
+    opcode = LIVEVIEW_WS_OPCODE_BINARY;
+
+    for (int i = 0; i < 20; i++)
+    {
+        opcode = ReadServerFrame(second_socket_fd, payload);
+
+        if (opcode == LIVEVIEW_WS_OPCODE_TEXT)
+            break;
+
+        Check(opcode == LIVEVIEW_WS_OPCODE_BINARY, "only images arrive before the status");
+    }
+
+    Check(opcode == LIVEVIEW_WS_OPCODE_TEXT,
+        "a client joining next to an up to date client still receives the status");
+    Check(std::string((const char*)&payload[0], payload.size()) == status,
+        "the second late text frame carries the current status");
+
+    close(second_socket_fd);
+    close(socket_fd);
+    server.Stop();
+}
+
 int main(void)
 {
     TestStartStopLifecycle();
     TestHttpRoutes();
     TestWebsocketStream();
+    TestLateClientReceivesStatus();
 
     printf("All live view server tests passed\n");
 

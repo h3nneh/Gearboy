@@ -98,7 +98,10 @@ private:
     void CloseAllClients(void);
     void BroadcastFrame(void);
     void BroadcastStatus(void);
-    void BroadcastToClients(const std::vector<uint8_t>& frame, bool droppable);
+    // With only_pending set, the frame goes to the websocket clients that are
+    // still waiting for their first status instead of to all of them.
+    void BroadcastToClients(const std::vector<uint8_t>& frame, bool droppable,
+        bool only_pending);
 
 private:
     std::atomic<bool> m_running;
