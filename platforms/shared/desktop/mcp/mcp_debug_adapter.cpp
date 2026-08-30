@@ -29,6 +29,7 @@
 #include "../gui_debug_memeditor.h"
 #include "../gui_debug_rewind.h"
 #include "../gui_debug_trace_logger.h"
+#include "../liveview/liveview_status.h"
 #include "../trace_logger_formatter.h"
 #include "../config.h"
 #include "../events.h"
@@ -1878,6 +1879,24 @@ json DebugAdapter::GetInputState()
     return {{"players", json::array({{{"player", 1}, {"pressed", pressed}}})}};
 }
 
+json DebugAdapter::SetAgentStatus(const std::string& text)
+{
+    std::string stored = liveview_status_set_agent_text(text);
+    LiveviewAgentStatus status = liveview_status_get_agent();
+
+    json result;
+    result["success"] = true;
+    result["length"] = (int)stored.size();
+    result["truncated"] = stored.size() < text.size();
+    result["seq"] = status.seq;
+    result["timestamp_ms"] = status.timestamp_ms;
+    // Without a live view server the text is still kept, it just reaches
+    // nobody until one starts.
+    result["live_view_running"] = emu_live_view_is_running();
+
+    return result;
+}
+
 json DebugAdapter::ListSprites()
 {
     json result;
@@ -2575,6 +2594,62 @@ json DebugAdapter::ListMemoryWatches(int area)
     result["count"] = count;
 
     return result;
+}
+
+std::vector<McpMemoryWatchValue> DebugAdapter::GetMemoryWatchValues()
+{
+    std::vector<McpMemoryWatchValue> values;
+
+    if (!m_core || !m_core->GetCartridge()->IsLoadedROM())
+        return values;
+
+    for (int area = 0; area < MEMORY_EDITOR_MAX; area++)
+    {
+        void* watches_ptr = NULL;
+        gui_debug_memory_get_watches(area, &watches_ptr);
+
+        std::vector<MemEditor::Watch>* watches = (std::vector<MemEditor::Watch>*)watches_ptr;
+
+        if (!watches || watches->empty())
+            continue;
+
+        MemoryAreaInfo info = GetMemoryAreaInfo(area);
+        u32 display_base = GetMemoryAreaDisplayBase(area);
+
+        for (const MemEditor::Watch& watch : *watches)
+        {
+            McpMemoryWatchValue value;
+            value.area = area;
+            value.address = (u32)watch.address;
+            value.size = (watch.size >= 0 && watch.size <= 3) ? (watch.size + 1) : 1;
+            value.label = watch.notes;
+            value.value = 0;
+
+            // An area without data, a Super Game Boy area on a plain Game Boy
+            // for instance, reads as zero, the same way the memory editor
+            // shows it.
+            if (MemoryAreaContainsDisplayAddress(info, display_base, value.address))
+            {
+                u32 offset = value.address - display_base;
+
+                for (int i = 0; (i < value.size) && ((offset + (u32)i) < info.size); i++)
+                    value.value |= (u32)info.data[offset + (u32)i] << (i * 8);
+            }
+
+            values.push_back(value);
+        }
+    }
+
+    return values;
+}
+
+std::vector<McpMemoryWatchValue> mcp_get_memory_watch_values(GearboyCore* core)
+{
+    if (!core)
+        return std::vector<McpMemoryWatchValue>();
+
+    DebugAdapter adapter(core);
+    return adapter.GetMemoryWatchValues();
 }
 
 json DebugAdapter::GetMemorySelection(int area)

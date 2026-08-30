@@ -30,8 +30,11 @@
 #include "events.h"
 #include "gui_debug_trace_logger.h"
 #include "mcp/mcp_manager.h"
+#include "mcp/mcp_debug_adapter.h"
 #include "link_cable/link_cable_manager.h"
 #include "liveview/liveview_server.h"
+#include "liveview/liveview_status.h"
+#include "Input.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #if defined(_WIN32)
@@ -53,8 +56,6 @@ static bool audio_enabled;
 static McpManager* mcp_manager;
 static LinkCableManager* link_cable_manager;
 static LiveviewServer* live_view_server;
-static std::string live_view_status_fields;
-static u64 live_view_status_seq;
 static bool link_cable_applied;
 static float tilt_x = 0.0f;
 static float tilt_y = 0.0f;
@@ -140,8 +141,6 @@ bool emu_init(void)
     mcp_manager->Init(gearboy);
 
     live_view_server = new LiveviewServer();
-    live_view_status_fields.clear();
-    live_view_status_seq = 0;
 
     rewind_init();
     runahead_init();
@@ -1227,24 +1226,62 @@ bool emu_live_view_is_running(void)
     return live_view_server && live_view_server->IsRunning();
 }
 
-// Keeps a JSON string value printable and free of characters that would break
-// the status message.
-static void live_view_sanitize(const char* source, char* destination, int size)
+// The eight Game Boy buttons in the order of the status shape (spec D3).
+static const char* const k_live_view_button_names[] =
+    { "a", "b", "start", "select", "up", "down", "left", "right" };
+static const Gameboy_Keys k_live_view_button_keys[] =
+    { A_Key, B_Key, Start_Key, Select_Key, Up_Key, Down_Key, Left_Key, Right_Key };
+
+static void live_view_append_string(std::string& out, const std::string& value)
 {
-    int written = 0;
+    out += '"';
+    out += liveview_status_escape_json(value);
+    out += '"';
+}
 
-    while (source && (source[written] != 0) && (written < size - 1))
+static void live_view_append_inputs(std::string& out)
+{
+    Input* input = gearboy->GetInput();
+
+    out += "\"inputs\":{";
+
+    for (size_t i = 0; i < sizeof(k_live_view_button_keys) / sizeof(k_live_view_button_keys[0]); i++)
     {
-        char character = source[written];
+        if (i > 0)
+            out += ',';
 
-        if ((character < 0x20) || (character > 0x7E) || (character == '"') || (character == '\\'))
-            character = ' ';
-
-        destination[written] = character;
-        written++;
+        out += '"';
+        out += k_live_view_button_names[i];
+        out += "\":";
+        out += input->IsKeyPressed(k_live_view_button_keys[i]) ? "true" : "false";
     }
 
-    destination[written] = 0;
+    out += '}';
+}
+
+static void live_view_append_watches(std::string& out)
+{
+    std::vector<McpMemoryWatchValue> watches = mcp_get_memory_watch_values(gearboy);
+
+    out += "\"watches\":[";
+
+    for (size_t i = 0; i < watches.size(); i++)
+    {
+        if (i > 0)
+            out += ',';
+
+        out += "{\"address\":";
+        out += std::to_string((unsigned long)watches[i].address);
+        out += ",\"size\":";
+        out += std::to_string(watches[i].size);
+        out += ",\"label\":";
+        live_view_append_string(out, watches[i].label);
+        out += ",\"value\":";
+        out += std::to_string((unsigned long)watches[i].value);
+        out += '}';
+    }
+
+    out += ']';
 }
 
 void emu_live_view_publish(void)
@@ -1257,24 +1294,30 @@ void emu_live_view_publish(void)
 
     live_view_server->PublishFrame(emu_frame_buffer, rt_info.screen_width, rt_info.screen_height, 3);
 
-    char title[64];
-    live_view_sanitize(rom_loaded ? gearboy->GetCartridge()->GetName() : "", title, sizeof(title));
+    LiveviewAgentStatus agent = liveview_status_get_agent();
 
-    char fields[256];
-    snprintf(fields, sizeof(fields),
-        "\"agent_text\":\"\",\"agent_ts\":0,"
-        "\"media\":{\"title\":\"%s\",\"paused\":%s,\"width\":%d,\"height\":%d}",
-        title, emu_is_paused() ? "true" : "false", rt_info.screen_width, rt_info.screen_height);
+    std::string status;
+    status.reserve(1024);
 
-    if (live_view_status_fields != fields)
-    {
-        live_view_status_fields = fields;
-        live_view_status_seq++;
-    }
-
-    char status[320];
-    snprintf(status, sizeof(status), "{\"type\":\"status\",\"seq\":%llu,%s}",
-        (unsigned long long)live_view_status_seq, fields);
+    status += "{\"type\":\"status\",\"seq\":";
+    status += std::to_string((unsigned long long)agent.seq);
+    status += ",\"agent_text\":";
+    live_view_append_string(status, agent.text);
+    status += ",\"agent_ts\":";
+    status += std::to_string((unsigned long long)agent.timestamp_ms);
+    status += ',';
+    live_view_append_inputs(status);
+    status += ',';
+    live_view_append_watches(status);
+    status += ",\"media\":{\"title\":";
+    live_view_append_string(status, rom_loaded ? gearboy->GetCartridge()->GetName() : "");
+    status += ",\"paused\":";
+    status += emu_is_paused() ? "true" : "false";
+    status += ",\"width\":";
+    status += std::to_string(rt_info.screen_width);
+    status += ",\"height\":";
+    status += std::to_string(rt_info.screen_height);
+    status += "}}";
 
     live_view_server->PublishStatus(status);
 }

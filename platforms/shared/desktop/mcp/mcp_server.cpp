@@ -1107,6 +1107,24 @@ json McpServer::BuildToolList()
     });
 
     tools.push_back({
+        {"name", "set_agent_status"},
+        {"title", "Set Agent Status"},
+        {"description", "Post the current analysis text to the live view status channel."},
+        {"annotations", {{"readOnlyHint", false}, {"destructiveHint", false}, {"idempotentHint", false}, {"openWorldHint", false}}},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"text", {
+                    {"type", "string"},
+                    {"description", "Status text shown in the live view; capped at 4096 bytes."}
+                }}
+            }},
+            {"required", json::array({"text"})},
+            {"additionalProperties", false}
+        }}
+    });
+
+    tools.push_back({
         {"name", "list_sprites"},
         {"title", "List Sprites"},
         {"description", "List 40 OAM sprites: position, tile, attributes, CGB palette/bank."},
@@ -2505,6 +2523,13 @@ json McpServer::ExecuteCommand(const std::string& toolName, const json& argument
     else if (normalizedTool == "controller_macro")
     {
         return {{"error", "controller_macro must be handled by the MCP manager"}};
+    }
+    else if (normalizedTool == "set_agent_status")
+    {
+        if (!arguments.contains("text") || !arguments["text"].is_string())
+            return {{"error", "text is required"}};
+
+        return m_debugAdapter.SetAgentStatus(arguments["text"].get<std::string>());
     }
     else if (normalizedTool == "list_sprites")
     {

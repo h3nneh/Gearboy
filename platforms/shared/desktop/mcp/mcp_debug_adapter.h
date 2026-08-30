@@ -65,6 +65,17 @@ struct BreakpointInfo
     std::string type_name;
 };
 
+// A memory watch registered in the debugger together with the value it holds
+// right now. Size is the width of the watch in bytes.
+struct McpMemoryWatchValue
+{
+    int area;
+    u32 address;
+    int size;
+    std::string label;
+    u32 value;
+};
+
 struct DisasmLine
 {
     u32 address;
@@ -152,6 +163,9 @@ public:
     json ControllerButton(int player, const std::string& button, const std::string& action);
     json GetInputState();
 
+    // Agent status published on the live view status channel
+    json SetAgentStatus(const std::string& text);
+
     // Disassembler operations
     json AddDisassemblerBookmark(u16 address, const std::string& name);
     json RemoveDisassemblerBookmark(u16 address);
@@ -174,6 +188,7 @@ public:
     json AddMemoryWatch(int area, int address, const std::string& notes, int size);
     json RemoveMemoryWatch(int area, int address);
     json ListMemoryWatches(int area);
+    std::vector<McpMemoryWatchValue> GetMemoryWatchValues();
     json MemorySearchCapture(int area);
     json MemorySearch(int area, const std::string& op, const std::string& compare_type, int compare_value, const std::string& data_type);
     json MemoryFindBytes(int area, const std::string& hex_bytes);
@@ -191,5 +206,9 @@ private:
     const char* GetBreakpointTypeName(int type);
     MemoryAreaInfo GetMemoryAreaInfo(int area);
 };
+
+// The registered memory watches with their current values, for callers that
+// have a core but no debug adapter of their own.
+std::vector<McpMemoryWatchValue> mcp_get_memory_watch_values(GearboyCore* core);
 
 #endif /* MCP_DEBUG_ADAPTER_H */
