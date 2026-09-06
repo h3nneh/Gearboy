@@ -98,7 +98,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Supported cartridges: ROM, ROM + RAM, MBC1, MBC2, MBC3, MBC5, MBC6, MBC7, HuC-1, HuC-3, MMM01, Pocket Camera, TAMA5, MBC1M, Wisdom Tree, M161, Sachen MMC1, Sachen MMC2 and PKJD.
 - Game Boy Color support.
 - Super Game Boy support.
-- Local two-instance Game Boy link cable support on desktop platforms.
+- Local two-instance Game Boy link cable support on desktop platforms and libretro core.
 - LCD screen ghosting effect as seen in the original Game Boy.
 - LCD dot matrix effects. 
 - Battery powered RAM save support.
