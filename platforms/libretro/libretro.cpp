@@ -99,7 +99,7 @@ static bool IsJoypadDevice(unsigned device)
 
 static LibretroInstance instances[2];
 static unsigned instance_count = 0;
-static LibretroLink* link = NULL;
+static LibretroLink* link_cable = NULL;
 static bool link_enabled = false;
 static bool link_vertical = false;
 static bool link_switched = false;
@@ -261,8 +261,8 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     unsigned width = rt_info.screen_width;
     unsigned height = rt_info.screen_height;
 
-    if (link)
-        link->Geometry(link_vertical, link_screen, &width, &height);
+    if (link_cable)
+        link_cable->Geometry(link_vertical, link_screen, &width, &height);
 
     float aspect = (float)width / height;
 
@@ -1006,7 +1006,7 @@ void retro_run(void)
         check_variables();
         apply_variables();
 
-        if (link)
+        if (link_cable)
         {
             struct retro_system_av_info av_info;
             retro_get_system_av_info(&av_info);
@@ -1022,8 +1022,8 @@ void retro_run(void)
         update_input(instances[i].core, i);
     }
 
-    if (link)
-        link->RunFrame();
+    if (link_cable)
+        link_cable->RunFrame();
     else
         instances[0].core->RunToVBlank(instances[0].frame_buffer, instances[0].audio_buffer, &instances[0].sample_count, false, NULL);
 
@@ -1036,11 +1036,11 @@ void retro_run(void)
     const s16* audio = instances[0].audio_buffer;
     int samples = instances[0].sample_count;
 
-    if (link)
+    if (link_cable)
     {
-        link->Geometry(link_vertical, link_screen, &width, &height);
-        video = link->Video(link_vertical, link_switched, link_screen);
-        audio = link->Audio(link_audio, &samples);
+        link_cable->Geometry(link_vertical, link_screen, &width, &height);
+        video = link_cable->Video(link_vertical, link_switched, link_screen);
+        audio = link_cable->Audio(link_audio, &samples);
     }
 
     video_cb(video, width, height, width * sizeof(u16));
@@ -1068,8 +1068,8 @@ void retro_reset(void)
         instances[i].sample_count = 0;
     }
 
-    if (link)
-        link->Reset();
+    if (link_cable)
+        link_cable->Reset();
     
     memset(dpad_vertical_latch, 0, sizeof(dpad_vertical_latch));
     memset(dpad_horizontal_latch, 0, sizeof(dpad_horizontal_latch));
@@ -1212,8 +1212,8 @@ static bool load_game(const struct retro_game_info* info, const struct retro_gam
 
     if (instance_count == 2)
     {
-        link = new LibretroLink(instances);
-        link->Reset();
+        link_cable = new LibretroLink(instances);
+        link_cable->Reset();
     }
 
     bool achievements = instance_count == 1;
@@ -1228,12 +1228,12 @@ static bool load_game(const struct retro_game_info* info, const struct retro_gam
     memset(libretro_tilt_x, 0, sizeof(libretro_tilt_x));
     memset(libretro_tilt_y, 0, sizeof(libretro_tilt_y));
 
-    if (link && !link_subsystem)
+    if (link_cable && !link_subsystem)
     {
         const char* directory = NULL;
         environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &directory);
-        link->SetSavePath(info->path, directory);
-        link->PersistentMemory(false, vfs_interface);
+        link_cable->SetSavePath(info->path, directory);
+        link_cable->PersistentMemory(false, vfs_interface);
     }
 
     return true;
@@ -1288,12 +1288,12 @@ static bool load_rom(GearboyCore* target, const struct retro_game_info* info)
 
 void retro_unload_game(void)
 {
-    if (game_loaded && link && !link_subsystem)
-        link->PersistentMemory(true, vfs_interface);
+    if (game_loaded && link_cable && !link_subsystem)
+        link_cable->PersistentMemory(true, vfs_interface);
 
     clear_cheats();
 
-    SafeDelete(link);
+    SafeDelete(link_cable);
 
     for (unsigned i = 0; i < instance_count; i++)
     {
@@ -1325,8 +1325,8 @@ size_t retro_serialize_size(void)
     if (!game_loaded)
         return 0;
 
-    if (link)
-        return link->StateSize();
+    if (link_cable)
+        return link_cable->StateSize();
 
     size_t size = 0;
     instances[0].core->SaveState(NULL, size);
@@ -1338,7 +1338,7 @@ bool retro_serialize(void *data, size_t size)
     if (!game_loaded)
         return false;
 
-    return link ? link->SaveState(data, size) : instances[0].core->SaveState(reinterpret_cast<u8*>(data), size);
+    return link_cable ? link_cable->SaveState(data, size) : instances[0].core->SaveState(reinterpret_cast<u8*>(data), size);
 }
 
 bool retro_unserialize(const void *data, size_t size)
@@ -1346,7 +1346,7 @@ bool retro_unserialize(const void *data, size_t size)
     if (!game_loaded)
         return false;
 
-    return link ? link->LoadState(data, size) : instances[0].core->LoadState(reinterpret_cast<const u8*>(data), size);
+    return link_cable ? link_cable->LoadState(data, size) : instances[0].core->LoadState(reinterpret_cast<const u8*>(data), size);
 }
 
 void *retro_get_memory_data(unsigned id)
