@@ -163,6 +163,9 @@ public:
     void SetLinkCableConnected(bool connected, u64 current_cycle);
     bool IsLinkCableConnected() const;
     void GetSerialState(SerialState& state) const;
+    void SetLinkCableIncomingByte(u32 transfer_id, u8 incoming_byte);
+    void SaveLinkCableState(std::ostream& stream);
+    void LoadLinkCableState(std::istream& stream);
     u32 GetLinkCablePromiseCycles(u64 current_cycle) const;
     INLINE void UpdateTimers(u8 ticks);
     INLINE void UpdateSerial(u8 ticks, u64 current_cycle);

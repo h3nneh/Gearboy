@@ -33,9 +33,8 @@
 
 #include "../../src/gearboy.h"
 #include "libretro_core_options.h"
+#include "libretro_link.h"
 
-#define VIDEO_WIDTH 256
-#define VIDEO_HEIGHT 224
 #define GB_VIDEO_WIDTH 160
 #define GB_VIDEO_HEIGHT 144
 
@@ -47,31 +46,27 @@ static const char slash = '\\';
 static const char slash = '/';
 #endif
 
-static u16* gearboy_frame_buf;
-
 static struct retro_log_callback logging;
 retro_log_printf_t log_cb;
 static char retro_system_directory[4096];
 static char retro_game_path[4096];
-
-static s16 audio_buf[AUDIO_BUFFER_SIZE];
-static int audio_sample_count;
 
 static bool force_dmg = false;
 static bool force_gba = false;
 static bool sgb_enabled = true;
 static bool sgb_border = true;
 static bool allow_up_down = false;
-static int8_t dpad_vertical_latch = 0;
-static int8_t dpad_horizontal_latch = 0;
+static int8_t dpad_vertical_latch[2] = {0, 0};
+static int8_t dpad_horizontal_latch[2] = {0, 0};
 static bool bootrom_dmg = false;
 static bool bootrom_gbc = false;
 static bool color_correction = true;
+static bool no_sprite_limit = false;
 static bool libretro_supports_bitmasks = false;
 static bool categories_supported = false;
-static unsigned input_device = RETRO_DEVICE_GAMEBOY;
-static float libretro_tilt_x = 0.0f;
-static float libretro_tilt_y = 0.0f;
+static unsigned input_device[2] = {RETRO_DEVICE_GAMEBOY, RETRO_DEVICE_GAMEBOY};
+static float libretro_tilt_x[2] = {0.0f, 0.0f};
+static float libretro_tilt_y[2] = {0.0f, 0.0f};
 static int mouse_sensitivity_x = 5;
 static int mouse_sensitivity_y = 5;
 static bool mouse_invert_x = false;
@@ -86,7 +81,7 @@ static bool analog_invert_x = false;
 static bool analog_invert_y = false;
 static int tilt_source = 0;
 static struct retro_sensor_interface sensor_interface = {NULL, NULL};
-static bool sensor_accel_enabled = false;
+static bool sensor_accel_enabled[2] = {false, false};
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
@@ -102,16 +97,29 @@ static bool IsJoypadDevice(unsigned device)
     return ((device == RETRO_DEVICE_JOYPAD) || (device == RETRO_DEVICE_GAMEBOY));
 }
 
-static GearboyCore* core;
+static LibretroInstance instances[2];
+static unsigned instance_count = 0;
+static LibretroLink* link_cable = NULL;
+static bool link_enabled = false;
+static bool link_vertical = false;
+static bool link_switched = false;
+static int link_screen = 0;
+static int link_audio = 0;
+static bool link_subsystem = false;
+static bool game_loaded = false;
 static Cartridge::CartridgeTypes mapper = Cartridge::CartridgeNotSupported;
 static const retro_vfs_interface* vfs_interface = NULL;
 static std::vector<std::string> libretro_cheats;
 
 static retro_environment_t environ_cb;
 
+static void init_instances(unsigned count);
+static void apply_variables(void);
 static void reset_controller_device(void);
+static void update_sensors(void);
 static void apply_controller_device(unsigned port, unsigned device, bool log_device);
-static bool load_rom(const struct retro_game_info* info);
+static bool load_rom(GearboyCore* target, const struct retro_game_info* info);
+static bool load_game(const struct retro_game_info* first, const struct retro_game_info* second);
 static void apply_cheats(void);
 static void clear_cheats(void);
 
@@ -148,33 +156,34 @@ void retro_init(void)
     else
         vfs_interface = NULL;
 
-    core = new GearboyCore();
-
-#ifdef PS2
-    core->Init(GB_PIXEL_BGR555);
-#else
-    core->Init(GB_PIXEL_RGB565);
-#endif
-
-    gearboy_frame_buf = new u16[VIDEO_WIDTH * VIDEO_HEIGHT];
-
-    audio_sample_count = 0;
     libretro_supports_bitmasks = environ_cb(RETRO_ENVIRONMENT_GET_INPUT_BITMASKS, NULL);
+}
 
-    apply_controller_device(0, input_device, false);
+static void init_instances(unsigned count)
+{
+    instance_count = count;
+
+    for (unsigned i = 0; i < instance_count; i++)
+    {
+        memset(&instances[i], 0, sizeof(instances[i]));
+        instances[i].core = new GearboyCore();
+#ifdef PS2
+        instances[i].core->Init(GB_PIXEL_BGR555);
+#else
+        instances[i].core->Init(GB_PIXEL_RGB565);
+#endif
+    }
 }
 
 void retro_deinit(void)
 {
-    clear_cheats();
-    SafeDeleteArray(gearboy_frame_buf);
-    SafeDelete(core);
+    retro_unload_game();
     vfs_interface = NULL;
 
-    audio_sample_count = 0;
     libretro_supports_bitmasks = false;
-    libretro_tilt_x = 0.0f;
-    libretro_tilt_y = 0.0f;
+
+    memset(libretro_tilt_x, 0, sizeof(libretro_tilt_x));
+    memset(libretro_tilt_y, 0, sizeof(libretro_tilt_y));
 
     reset_controller_device();
 }
@@ -186,21 +195,21 @@ unsigned retro_api_version(void)
 
 void retro_set_controller_port_device(unsigned port, unsigned device)
 {
-    if (port > 0)
+    if (port > 1)
     {
         if (log_cb)
             log_cb(RETRO_LOG_DEBUG, "retro_set_controller_port_device invalid port number: %u\n", port);
         return;
     }
 
-    input_device = device;
+    input_device[port] = device;
 
     apply_controller_device(port, device, true);
 }
 
 static void reset_controller_device(void)
 {
-    input_device = RETRO_DEVICE_GAMEBOY;
+    input_device[0] = input_device[1] = RETRO_DEVICE_GAMEBOY;
 }
 
 static void apply_controller_device(unsigned port, unsigned device, bool log_device)
@@ -241,12 +250,26 @@ static retro_input_state_t input_state_cb;
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
     GB_RuntimeInfo rt_info;
-    core->GetRuntimeInfo(rt_info);
-    float aspect                = (float)rt_info.screen_width/rt_info.screen_height;
-    info->geometry.base_width   = rt_info.screen_width;
-    info->geometry.base_height  = rt_info.screen_height;
-    info->geometry.max_width    = VIDEO_WIDTH;
-    info->geometry.max_height   = VIDEO_HEIGHT;
+
+    rt_info.screen_width = GB_VIDEO_WIDTH;
+    rt_info.screen_height = GB_VIDEO_HEIGHT;
+    rt_info.fps = (double)GEARBOY_MASTER_CLOCK_RATE / GAMEBOY_CLOCKS_PER_FRAME;
+
+    if (game_loaded)
+        instances[0].core->GetRuntimeInfo(rt_info);
+
+    unsigned width = rt_info.screen_width;
+    unsigned height = rt_info.screen_height;
+
+    if (link_cable)
+        link_cable->Geometry(link_vertical, link_screen, &width, &height);
+
+    float aspect = (float)width / height;
+
+    info->geometry.base_width   = width;
+    info->geometry.base_height  = height;
+    info->geometry.max_width    = 320;
+    info->geometry.max_height   = 288;
     info->geometry.aspect_ratio = aspect;
     info->timing.fps            = rt_info.fps;
     info->timing.sample_rate    = 44100.0f;
@@ -269,10 +292,28 @@ void retro_set_environment(retro_environment_t cb)
 
     static const struct retro_controller_info ports[] = {
         { controllers, 3 },
+        { controllers, 3 },
         { NULL, 0 },
     };
 
     cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports);
+
+    static const struct retro_subsystem_memory_info memory1[] = {
+        { "srm", GEARBOY_LINK_RAM_1 }, { "rtc", GEARBOY_LINK_RTC_1 }
+    };
+    static const struct retro_subsystem_memory_info memory2[] = {
+        { "srm2", GEARBOY_LINK_RAM_2 }, { "rtc2", GEARBOY_LINK_RTC_2 }
+    };
+    static const struct retro_subsystem_rom_info roms[] = {
+        { "Screen 1", "gb|dmg|gbc|cgb|sgb", false, false, true, memory1, 2 },
+        { "Screen 2", "gb|dmg|gbc|cgb|sgb", false, false, true, memory2, 2 }
+    };
+    static const struct retro_subsystem_info subsystems[] = {
+        { "2 Player Game Boy Link", "gb_link_2p", roms, 2, GEARBOY_LINK_SUBSYSTEM },
+        { NULL, NULL, NULL, 0, 0 }
+    };
+
+    cb(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, (void*)subsystems);
 
     libretro_set_core_options(environ_cb, &categories_supported);
 }
@@ -302,19 +343,19 @@ void retro_set_video_refresh(retro_video_refresh_t cb)
     video_cb = cb;
 }
 
-static bool load_bootrom_file(const char* path, bool gbc)
+static bool load_bootrom_file(GearboyCore* target, const char* path, bool gbc)
 {
     if (!vfs_interface)
     {
         if (gbc)
-            core->GetMemory()->LoadBootromGBC(path);
+            target->GetMemory()->LoadBootromGBC(path);
         else
-            core->GetMemory()->LoadBootromDMG(path);
+            target->GetMemory()->LoadBootromDMG(path);
 
-        return core->GetMemory()->IsBootromLoaded(gbc);
+        return target->GetMemory()->IsBootromLoaded(gbc);
     }
 
-    core->GetMemory()->UnloadBootrom(gbc);
+    target->GetMemory()->UnloadBootrom(gbc);
 
     retro_vfs_file_handle* file = vfs_interface->open(path, RETRO_VFS_FILE_ACCESS_READ,
         RETRO_VFS_FILE_ACCESS_HINT_NONE);
@@ -347,7 +388,7 @@ static bool load_bootrom_file(const char* path, bool gbc)
 
     vfs_interface->close(file);
 
-    if ((total != size) || !core->GetMemory()->LoadBootromFromBuffer(bootrom, (int)size, gbc))
+    if ((total != size) || !target->GetMemory()->LoadBootromFromBuffer(bootrom, (int)size, gbc))
     {
         log_cb(RETRO_LOG_ERROR, "There was a problem reading the bootrom file %s\n", path);
         return false;
@@ -357,7 +398,7 @@ static bool load_bootrom_file(const char* path, bool gbc)
     return true;
 }
 
-static void load_bootroms(void)
+static void load_bootroms(GearboyCore* target)
 {
     char bootrom_dmg_path[4112];
     char bootrom_gbc_path[4112];
@@ -365,26 +406,25 @@ static void load_bootroms(void)
     snprintf(bootrom_dmg_path, 4112, "%s%cdmg_boot.bin", retro_system_directory, slash);
     snprintf(bootrom_gbc_path, 4112, "%s%ccgb_boot.bin", retro_system_directory, slash);
 
-    load_bootrom_file(bootrom_dmg_path, false);
-    load_bootrom_file(bootrom_gbc_path, true);
-    core->GetMemory()->EnableBootromDMG(bootrom_dmg);
-    core->GetMemory()->EnableBootromGBC(bootrom_gbc);
+    load_bootrom_file(target, bootrom_dmg_path, false);
+    load_bootrom_file(target, bootrom_gbc_path, true);
+
+    target->GetMemory()->EnableBootromDMG(bootrom_dmg);
+    target->GetMemory()->EnableBootromGBC(bootrom_gbc);
 }
 
-static void update_input(void)
+static void update_input(GearboyCore* target, unsigned port)
 {
-    input_poll_cb();
-
     int16_t ib = 0;
-    if (IsJoypadDevice(input_device))
+    if (IsJoypadDevice(input_device[port]))
     {
         if (libretro_supports_bitmasks)
-            ib = input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+            ib = input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
         else
         {
             unsigned int i;
             for (i = 0; i <= RETRO_DEVICE_ID_JOYPAD_R3; i++)
-                ib |= input_state_cb(0, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
+                ib |= input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
         }
     }
 
@@ -402,12 +442,12 @@ static void update_input(void)
     {
         if (raw_up && raw_down)
         {
-            if (dpad_vertical_latch > 0)
+            if (dpad_vertical_latch[port] > 0)
             {
                 up = true;
                 down = false;
             }
-            else if (dpad_vertical_latch < 0)
+            else if (dpad_vertical_latch[port] < 0)
             {
                 up = false;
                 down = true;
@@ -416,36 +456,36 @@ static void update_input(void)
             {
                 up = true;
                 down = false;
-                dpad_vertical_latch = 1;
+                dpad_vertical_latch[port] = 1;
             }
         }
         else if (raw_up)
         {
             up = true;
             down = false;
-            dpad_vertical_latch = 1;
+            dpad_vertical_latch[port] = 1;
         }
         else if (raw_down)
         {
             up = false;
             down = true;
-            dpad_vertical_latch = -1;
+            dpad_vertical_latch[port] = -1;
         }
         else
         {
             up = false;
             down = false;
-            dpad_vertical_latch = 0;
+            dpad_vertical_latch[port] = 0;
         }
 
         if (raw_left && raw_right)
         {
-            if (dpad_horizontal_latch > 0)
+            if (dpad_horizontal_latch[port] > 0)
             {
                 left = true;
                 right = false;
             }
-            else if (dpad_horizontal_latch < 0)
+            else if (dpad_horizontal_latch[port] < 0)
             {
                 left = false;
                 right = true;
@@ -454,65 +494,65 @@ static void update_input(void)
             {
                 left = true;
                 right = false;
-                dpad_horizontal_latch = 1;
+                dpad_horizontal_latch[port] = 1;
             }
         }
         else if (raw_left)
         {
             left = true;
             right = false;
-            dpad_horizontal_latch = 1;
+            dpad_horizontal_latch[port] = 1;
         }
         else if (raw_right)
         {
             left = false;
             right = true;
-            dpad_horizontal_latch = -1;
+            dpad_horizontal_latch[port] = -1;
         }
         else
         {
             left = false;
             right = false;
-            dpad_horizontal_latch = 0;
+            dpad_horizontal_latch[port] = 0;
         }
     }
 
     if (up)
-        core->KeyPressed(Up_Key);
+        target->KeyPressed(Up_Key);
     else
-        core->KeyReleased(Up_Key);
+        target->KeyReleased(Up_Key);
 
     if (down)
-        core->KeyPressed(Down_Key);
+        target->KeyPressed(Down_Key);
     else
-        core->KeyReleased(Down_Key);
+        target->KeyReleased(Down_Key);
 
     if (left)
-        core->KeyPressed(Left_Key);
+        target->KeyPressed(Left_Key);
     else
-        core->KeyReleased(Left_Key);
+        target->KeyReleased(Left_Key);
 
     if (right)
-        core->KeyPressed(Right_Key);
+        target->KeyPressed(Right_Key);
     else
-        core->KeyReleased(Right_Key);
+        target->KeyReleased(Right_Key);
 
     if (ib & (1 << RETRO_DEVICE_ID_JOYPAD_B))
-        core->KeyPressed(B_Key);
+        target->KeyPressed(B_Key);
     else
-        core->KeyReleased(B_Key);
+        target->KeyReleased(B_Key);
     if (ib & (1 << RETRO_DEVICE_ID_JOYPAD_A))
-        core->KeyPressed(A_Key);
+        target->KeyPressed(A_Key);
     else
-        core->KeyReleased(A_Key);
+        target->KeyReleased(A_Key);
     if (ib & (1 << RETRO_DEVICE_ID_JOYPAD_START))
-        core->KeyPressed(Start_Key);
+        target->KeyPressed(Start_Key);
     else
-        core->KeyReleased(Start_Key);
+        target->KeyReleased(Start_Key);
     if (ib & (1 << RETRO_DEVICE_ID_JOYPAD_SELECT))
-        core->KeyPressed(Select_Key);
+        target->KeyPressed(Select_Key);
     else
-        core->KeyReleased(Select_Key);
+        target->KeyReleased(Select_Key);
 
     // MBC7 tilt input
     if (tilt_source == 1)
@@ -520,41 +560,41 @@ static void update_input(void)
         // Sensor-based tilt
         if (sensor_interface.get_sensor_input)
         {
-            float ax = sensor_interface.get_sensor_input(0, RETRO_SENSOR_ACCELEROMETER_X);
-            float az = sensor_interface.get_sensor_input(0, RETRO_SENSOR_ACCELEROMETER_Z);
+            float ax = sensor_interface.get_sensor_input(port, RETRO_SENSOR_ACCELEROMETER_X);
+            float az = sensor_interface.get_sensor_input(port, RETRO_SENSOR_ACCELEROMETER_Z);
             int sx = MAX(sensor_sensitivity_x, 1);
             int sy = MAX(sensor_sensitivity_y, 1);
-            libretro_tilt_x = ax * (float)sx / 5.0f;
-            libretro_tilt_y = az * (float)sy / 5.0f;
+            libretro_tilt_x[port] = ax * (float)sx / 5.0f;
+            libretro_tilt_y[port] = az * (float)sy / 5.0f;
             if (sensor_invert_x)
-                libretro_tilt_x = -libretro_tilt_x;
+                libretro_tilt_x[port] = -libretro_tilt_x[port];
             if (sensor_invert_y)
-                libretro_tilt_y = -libretro_tilt_y;
-            libretro_tilt_x = CLAMP(libretro_tilt_x, -4.0f, 4.0f);
-            libretro_tilt_y = CLAMP(libretro_tilt_y, -4.0f, 4.0f);
+                libretro_tilt_y[port] = -libretro_tilt_y[port];
+            libretro_tilt_x[port] = CLAMP(libretro_tilt_x[port], -4.0f, 4.0f);
+            libretro_tilt_y[port] = CLAMP(libretro_tilt_y[port], -4.0f, 4.0f);
         }
     }
     else if (tilt_source == 2)
     {
         // Analog stick tilt
-        int16_t ax = input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
-        int16_t ay = input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
+        int16_t ax = input_state_cb(port, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
+        int16_t ay = input_state_cb(port, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
         int sx = MAX(analog_sensitivity_x, 1);
         int sy = MAX(analog_sensitivity_y, 1);
-        libretro_tilt_x = -((float)ax / 32768.0f) * (float)sx / 10.0f;
-        libretro_tilt_y = -((float)ay / 32768.0f) * (float)sy / 10.0f;
+        libretro_tilt_x[port] = -((float)ax / 32768.0f) * (float)sx / 10.0f;
+        libretro_tilt_y[port] = -((float)ay / 32768.0f) * (float)sy / 10.0f;
         if (analog_invert_x)
-            libretro_tilt_x = -libretro_tilt_x;
+            libretro_tilt_x[port] = -libretro_tilt_x[port];
         if (analog_invert_y)
-            libretro_tilt_y = -libretro_tilt_y;
-        libretro_tilt_x = CLAMP(libretro_tilt_x, -4.0f, 4.0f);
-        libretro_tilt_y = CLAMP(libretro_tilt_y, -4.0f, 4.0f);
+            libretro_tilt_y[port] = -libretro_tilt_y[port];
+        libretro_tilt_x[port] = CLAMP(libretro_tilt_x[port], -4.0f, 4.0f);
+        libretro_tilt_y[port] = CLAMP(libretro_tilt_y[port], -4.0f, 4.0f);
     }
     else
     {
         // Mouse-based tilt (default)
-        int mouse_x = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
-        int mouse_y = input_state_cb(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+        int mouse_x = input_state_cb(port, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
+        int mouse_y = input_state_cb(port, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
         if (mouse_x != 0 || mouse_y != 0)
         {
             int sx = MAX(mouse_sensitivity_x, 1);
@@ -563,29 +603,105 @@ static void update_input(void)
             float dy = -(float)mouse_y * ((float)sy / 200.0f);
             if (mouse_invert_x) dx = -dx;
             if (mouse_invert_y) dy = -dy;
-            libretro_tilt_x += dx;
-            libretro_tilt_y += dy;
-            libretro_tilt_x = CLAMP(libretro_tilt_x, -4.0f, 4.0f);
-            libretro_tilt_y = CLAMP(libretro_tilt_y, -4.0f, 4.0f);
+            libretro_tilt_x[port] += dx;
+            libretro_tilt_y[port] += dy;
+            libretro_tilt_x[port] = CLAMP(libretro_tilt_x[port], -4.0f, 4.0f);
+            libretro_tilt_y[port] = CLAMP(libretro_tilt_y[port], -4.0f, 4.0f);
         }
     }
 
     if (tilt_source == 0)
     {
-        libretro_tilt_x *= 0.70f;
-        libretro_tilt_y *= 0.70f;
-        if (libretro_tilt_x > -0.01f && libretro_tilt_x < 0.01f)
-            libretro_tilt_x = 0.0f;
-        if (libretro_tilt_y > -0.01f && libretro_tilt_y < 0.01f)
-            libretro_tilt_y = 0.0f;
+        libretro_tilt_x[port] *= 0.70f;
+        libretro_tilt_y[port] *= 0.70f;
+        if (libretro_tilt_x[port] > -0.01f && libretro_tilt_x[port] < 0.01f)
+            libretro_tilt_x[port] = 0.0f;
+        if (libretro_tilt_y[port] > -0.01f && libretro_tilt_y[port] < 0.01f)
+            libretro_tilt_y[port] = 0.0f;
     }
 
-    core->SetAccelerometer((double)libretro_tilt_x, (double)libretro_tilt_y);
+    target->SetAccelerometer((double)libretro_tilt_x[port], (double)libretro_tilt_y[port]);
+}
+
+static void update_sensors(void)
+{
+    if (!sensor_interface.set_sensor_state)
+        return;
+
+    for (unsigned port = 0; port < 2; port++)
+    {
+        bool enabled = game_loaded && tilt_source == 1 && port < instance_count;
+        if (enabled != sensor_accel_enabled[port])
+        {
+            bool success = sensor_interface.set_sensor_state(port, enabled ?
+                RETRO_SENSOR_ACCELEROMETER_ENABLE : RETRO_SENSOR_ACCELEROMETER_DISABLE, enabled ? 60 : 0);
+            sensor_accel_enabled[port] = enabled && success;
+        }
+    }
 }
 
 static void check_variables(void)
 {
     struct retro_variable var = {0};
+
+    var.key = "gearboy_link_enable";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        if (strcmp(var.value, "Enabled") == 0)
+            link_enabled = true;
+        else
+            link_enabled = false;
+    }
+
+    var.key = "gearboy_link_placement";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        if (strcmp(var.value, "Vertical") == 0)
+            link_vertical = true;
+        else
+            link_vertical = false;
+    }
+
+    var.key = "gearboy_link_switch";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        if (strcmp(var.value, "Enabled") == 0)
+            link_switched = true;
+        else
+            link_switched = false;
+    }
+
+    var.key = "gearboy_link_screen";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        if (strcmp(var.value, "Screen 1") == 0)
+            link_screen = 1;
+        else if (strcmp(var.value, "Screen 2") == 0)
+            link_screen = 2;
+        else
+            link_screen = 0;
+    }
+
+    var.key = "gearboy_link_audio";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        if (strcmp(var.value, "Screen 2") == 0)
+            link_audio = 1;
+        else if (strcmp(var.value, "Mix") == 0)
+            link_audio = 2;
+        else
+            link_audio = 0;
+    }
 
     var.key = "gearboy_model";
     var.value = NULL;
@@ -751,23 +867,9 @@ static void check_variables(void)
         else if (strcmp(var.value, "Analog Stick") == 0)
             new_source = 2;
 
-        if (new_source != tilt_source)
-        {
-            tilt_source = new_source;
-            if (tilt_source == 1 && sensor_interface.set_sensor_state && !sensor_accel_enabled)
-            {
-                sensor_accel_enabled = sensor_interface.set_sensor_state(0, RETRO_SENSOR_ACCELEROMETER_ENABLE, 60);
-            }
-            else if (tilt_source != 1 && sensor_interface.set_sensor_state && sensor_accel_enabled)
-            {
-                sensor_interface.set_sensor_state(0, RETRO_SENSOR_ACCELEROMETER_DISABLE, 0);
-                sensor_accel_enabled = false;
-            }
-        }
-        else if (tilt_source == 1 && sensor_interface.set_sensor_state && !sensor_accel_enabled)
-        {
-            sensor_accel_enabled = sensor_interface.set_sensor_state(0, RETRO_SENSOR_ACCELEROMETER_ENABLE, 60);
-        }
+        tilt_source = new_source;
+
+        update_sensors();
     }
 
     var.key = "gearboy_analog_sensitivity_x";
@@ -854,8 +956,6 @@ static void check_variables(void)
             color_correction = true;
         else
             color_correction = false;
-
-        core->EnableColorCorrection(color_correction);
     }
 
     var.key = "gearboy_no_sprite_limit";
@@ -864,9 +964,9 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         if (strcmp(var.value, "Enabled") == 0)
-            core->GetVideo()->SetNoSpriteLimit(true);
+            no_sprite_limit = true;
         else
-            core->GetVideo()->SetNoSpriteLimit(false);
+            no_sprite_limit = false;
     }
 
     var.key = "gearboy_up_down_allowed";
@@ -881,60 +981,134 @@ static void check_variables(void)
     }
 }
 
+static void apply_variables(void)
+{
+    for (unsigned i = 0; i < instance_count; i++)
+    {
+        GearboyCore* core = instances[i].core;
+
+        core->SetDMGPalette(current_palette[0], current_palette[1], current_palette[2], current_palette[3]);
+        core->EnableColorCorrection(color_correction);
+        core->GetVideo()->SetNoSpriteLimit(no_sprite_limit);
+        core->SetSGBBorder(sgb_border);
+    }
+}
+
 void retro_run(void)
 {
+    if (!game_loaded)
+        return;
+
     bool updated = false;
+
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
     {
         check_variables();
-        core->SetDMGPalette(current_palette[0], current_palette[1], current_palette[2], current_palette[3]);
-        core->SetSGBBorder(sgb_border);
+        apply_variables();
+
+        if (link_cable)
+        {
+            struct retro_system_av_info av_info;
+            retro_get_system_av_info(&av_info);
+            environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &av_info.geometry);
+        }
     }
 
-    update_input();
+    input_poll_cb();
 
-    core->RunToVBlank(gearboy_frame_buf, audio_buf, &audio_sample_count, false, NULL);
+    for (unsigned i = 0; i < instance_count; i++)
+    {
+        instances[i].sample_count = 0;
+        update_input(instances[i].core, i);
+    }
+
+    if (link_cable)
+        link_cable->RunFrame();
+    else
+        instances[0].core->RunToVBlank(instances[0].frame_buffer, instances[0].audio_buffer, &instances[0].sample_count, false, NULL);
 
     GB_RuntimeInfo rt_info;
-    core->GetRuntimeInfo(rt_info);
-    video_cb((uint8_t*)gearboy_frame_buf, rt_info.screen_width, rt_info.screen_height, rt_info.screen_width * sizeof(u16));
+    instances[0].core->GetRuntimeInfo(rt_info);
 
-    if (audio_sample_count > 0)
-        audio_batch_cb(audio_buf, audio_sample_count / 2);
+    unsigned width = rt_info.screen_width;
+    unsigned height = rt_info.screen_height;
+    const u16* video = instances[0].frame_buffer;
+    const s16* audio = instances[0].audio_buffer;
+    int samples = instances[0].sample_count;
 
-    audio_sample_count = 0;
+    if (link_cable)
+    {
+        link_cable->Geometry(link_vertical, link_screen, &width, &height);
+        video = link_cable->Video(link_vertical, link_switched, link_screen);
+        audio = link_cable->Audio(link_audio, &samples);
+    }
+
+    video_cb(video, width, height, width * sizeof(u16));
+
+    if (samples > 0)
+        audio_batch_cb(audio, samples / 2);
 }
 
 void retro_reset(void)
 {
+    if (!game_loaded)
+        return;
+
     check_variables();
-    load_bootroms();
+    apply_variables();
 
-    core->SetDMGPalette(current_palette[0], current_palette[1], current_palette[2], current_palette[3]);
-    core->EnableColorCorrection(color_correction);
+    for (unsigned i = 0; i < instance_count; i++)
+    {
+        GearboyCore* core = instances[i].core;
 
-    core->SetSGBEnabled(sgb_enabled);
-    core->SetSGBBorder(sgb_border);
-    core->ResetROMPreservingRAM(force_dmg, mapper, force_gba);
+        load_bootroms(core);
+        core->SetSGBEnabled(instance_count == 1 && sgb_enabled);
+        core->ResetROMPreservingRAM(force_dmg, mapper, force_gba);
+        memset(instances[i].frame_buffer, 0, sizeof(instances[i].frame_buffer));
+        instances[i].sample_count = 0;
+    }
+
+    if (link_cable)
+        link_cable->Reset();
+    
+    memset(dpad_vertical_latch, 0, sizeof(dpad_vertical_latch));
+    memset(dpad_horizontal_latch, 0, sizeof(dpad_horizontal_latch));
 }
 
-
-bool retro_load_game(const struct retro_game_info *info)
+bool retro_load_game(const struct retro_game_info* info)
 {
-    clear_cheats();
-    core->GetCartridge()->Reset();
+    return load_game(info, NULL);
+}
+
+static bool load_game(const struct retro_game_info* info, const struct retro_game_info* second)
+{
+    retro_unload_game();
+
+    if (!info)
+        return false;
+
     environ_cb(RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE, &sensor_interface);
     check_variables();
-    load_bootroms();
+    link_subsystem = second != NULL;
+    init_instances(link_enabled || link_subsystem ? 2 : 1);
+    apply_variables();
 
-    core->SetDMGPalette(current_palette[0], current_palette[1], current_palette[2], current_palette[3]);
+    const struct retro_game_info* roms[2] = { info, second ? second : info };
 
-    core->SetSGBEnabled(sgb_enabled);
-    core->SetSGBBorder(sgb_border);
-    if (!load_rom(info))
+    for (unsigned i = 0; i < instance_count; i++)
     {
-        log_cb(RETRO_LOG_ERROR, "Invalid or corrupted ROM.\n");
-        return false;
+        GearboyCore* core = instances[i].core;
+
+        load_bootroms(core);
+
+        core->SetSGBEnabled(instance_count == 1 && sgb_enabled);
+
+        if (!load_rom(core, roms[i]))
+        {
+            log_cb(RETRO_LOG_ERROR, "Invalid or corrupted ROM for screen %u.\n", i + 1);
+            retro_unload_game();
+            return false;
+        }
     }
 
     struct retro_input_descriptor desc[] = {
@@ -946,6 +1120,14 @@ bool retro_load_game(const struct retro_game_info *info)
         { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },
         { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,      "B" },
         { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,      "A" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,   "Left" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,     "Up" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,   "Down" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT,  "Right" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,  "Start" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,      "B" },
+        { 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,      "A" },
         { 0 },
     };
 
@@ -956,10 +1138,13 @@ bool retro_load_game(const struct retro_game_info *info)
     if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
     {
         log_cb(RETRO_LOG_INFO, "RETRO_PIXEL_FORMAT_RGB565 is not supported.\n");
+        retro_unload_game();
         return false;
     }
 
     snprintf(retro_game_path, sizeof(retro_game_path), "%s", info->path ? info->path : "");
+
+    GearboyCore* core = instances[0].core;
 
     struct retro_memory_descriptor descs[11];
 
@@ -1025,25 +1210,48 @@ bool retro_load_game(const struct retro_game_info *info)
     mmaps.num_descriptors = sizeof(descs) / sizeof(descs[0]);
     environ_cb(RETRO_ENVIRONMENT_SET_MEMORY_MAPS, &mmaps);
 
-    bool achievements = true;
+    if (instance_count == 2)
+    {
+        link_cable = new LibretroLink(instances);
+        link_cable->Reset();
+    }
+
+    bool achievements = instance_count == 1;
     environ_cb(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS, &achievements);
+
+    game_loaded = true;
+
+    update_sensors();
+
+    memset(dpad_vertical_latch, 0, sizeof(dpad_vertical_latch));
+    memset(dpad_horizontal_latch, 0, sizeof(dpad_horizontal_latch));
+    memset(libretro_tilt_x, 0, sizeof(libretro_tilt_x));
+    memset(libretro_tilt_y, 0, sizeof(libretro_tilt_y));
+
+    if (link_cable && !link_subsystem)
+    {
+        const char* directory = NULL;
+        environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &directory);
+        link_cable->SetSavePath(info->path, directory);
+        link_cable->PersistentMemory(false, vfs_interface);
+    }
 
     return true;
 }
 
-static bool load_rom(const struct retro_game_info* info)
+static bool load_rom(GearboyCore* target, const struct retro_game_info* info)
 {
     if (!info)
         return false;
 
-    if (IsValidPointer(info->data) && (info->size > 0))
-        return core->LoadROMFromBuffer(reinterpret_cast<const u8*>(info->data), info->size, force_dmg, mapper, force_gba);
+    if (IsValidPointer(info->data) && (info->size > 0) && (info->size <= 0x7FFFFFFF))
+        return target->LoadROMFromBuffer(reinterpret_cast<const u8*>(info->data), info->size, force_dmg, mapper, force_gba);
 
     if (!info->path || !info->path[0])
         return false;
 
     if (!vfs_interface)
-        return core->LoadROM(info->path, force_dmg, mapper, force_gba);
+        return target->LoadROM(info->path, force_dmg, mapper, force_gba);
 
     retro_vfs_file_handle* file = vfs_interface->open(info->path, RETRO_VFS_FILE_ACCESS_READ,
         RETRO_VFS_FILE_ACCESS_HINT_NONE);
@@ -1070,8 +1278,9 @@ static bool load_rom(const struct retro_game_info* info)
     }
 
     bool loaded = vfs_interface->close(file) == 0 && total == size;
+
     if (loaded)
-        loaded = core->LoadROMFromBuffer(buffer, (int)size, force_dmg, mapper, force_gba);
+        loaded = target->LoadROMFromBuffer(buffer, (int)size, force_dmg, mapper, force_gba);
 
     SafeDeleteArray(buffer);
     return loaded;
@@ -1079,7 +1288,23 @@ static bool load_rom(const struct retro_game_info* info)
 
 void retro_unload_game(void)
 {
+    if (game_loaded && link_cable && !link_subsystem)
+        link_cable->PersistentMemory(true, vfs_interface);
+
     clear_cheats();
+
+    SafeDelete(link_cable);
+
+    for (unsigned i = 0; i < instance_count; i++)
+    {
+        SafeDelete(instances[i].core);
+        instances[i].sample_count = 0;
+    }
+
+    instance_count = 0;
+    game_loaded = false;
+    update_sensors();
+    link_subsystem = false;
 }
 
 unsigned retro_get_region(void)
@@ -1089,38 +1314,70 @@ unsigned retro_get_region(void)
 
 bool retro_load_game_special(unsigned type, const struct retro_game_info *info, size_t num)
 {
-    return false;
+    if (type != GEARBOY_LINK_SUBSYSTEM || !info || num != 2)
+        return false;
+
+    return load_game(&info[0], &info[1]);
 }
 
 size_t retro_serialize_size(void)
 {
-    size_t size;
-    core->SaveState(NULL, size);
+    if (!game_loaded)
+        return 0;
+
+    if (link_cable)
+        return link_cable->StateSize();
+
+    size_t size = 0;
+    instances[0].core->SaveState(NULL, size);
     return size;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-    return core->SaveState(reinterpret_cast<u8*>(data), size);
+    if (!game_loaded)
+        return false;
+
+    return link_cable ? link_cable->SaveState(data, size) : instances[0].core->SaveState(reinterpret_cast<u8*>(data), size);
 }
 
 bool retro_unserialize(const void *data, size_t size)
 {
-    return core->LoadState(reinterpret_cast<const u8*>(data), size);
+    if (!game_loaded)
+        return false;
+
+    return link_cable ? link_cable->LoadState(data, size) : instances[0].core->LoadState(reinterpret_cast<const u8*>(data), size);
 }
 
 void *retro_get_memory_data(unsigned id)
 {
+    if (!game_loaded)
+        return 0;
+
+    GearboyCore* target = instances[0].core;
+
+    if (id == GEARBOY_LINK_RAM_2 || id == GEARBOY_LINK_RTC_2)
+    {
+        if (instance_count < 2)
+            return 0;
+
+        target = instances[1].core;
+    }
+    else if (id >= 0x100 && id != GEARBOY_LINK_RAM_1 && id != GEARBOY_LINK_RTC_1)
+        return 0;
+
+    id &= 0xFF;
+
     switch (id)
     {
         case RETRO_MEMORY_SAVE_RAM:
-            if (core->GetMemory()->GetCurrentRule()->GetRamSize() > 0)
-                return core->GetMemory()->GetCurrentRule()->GetRamBanks();
+            if (target->GetMemory()->GetCurrentRule()->GetRamSize() > 0)
+                return target->GetMemory()->GetCurrentRule()->GetRamBanks();
             return NULL;
         case RETRO_MEMORY_RTC:
-            return core->GetMemory()->GetCurrentRule()->GetRTCMemory();
+            return target->GetMemory()->GetCurrentRule()->GetRTCMemory();
         case RETRO_MEMORY_SYSTEM_RAM:
-            return core->IsCGB() ? core->GetMemory()->GetCGBRAM() : core->GetMemory()->GetMemoryMap() + 0xC000;
+            return target->IsCGB() ? target->GetMemory()->GetCGBRAM() : target->GetMemory()->GetMemoryMap() + 0xC000;
     }
 
     return NULL;
@@ -1128,14 +1385,30 @@ void *retro_get_memory_data(unsigned id)
 
 size_t retro_get_memory_size(unsigned id)
 {
+    if (!game_loaded)
+        return 0;
+
+    GearboyCore* target = instances[0].core;
+
+    if (id == GEARBOY_LINK_RAM_2 || id == GEARBOY_LINK_RTC_2)
+    {
+        if (instance_count < 2)
+            return 0;
+        target = instances[1].core;
+    }
+    else if (id >= 0x100 && id != GEARBOY_LINK_RAM_1 && id != GEARBOY_LINK_RTC_1)
+        return 0;
+
+    id &= 0xFF;
+
     switch (id)
     {
         case RETRO_MEMORY_SAVE_RAM:
-           return core->GetMemory()->GetCurrentRule()->GetRamSize();
+           return target->GetMemory()->GetCurrentRule()->GetRamSize();
         case RETRO_MEMORY_RTC:
-           return core->GetMemory()->GetCurrentRule()->GetRTCSize();
+           return target->GetMemory()->GetCurrentRule()->GetRTCSize();
         case RETRO_MEMORY_SYSTEM_RAM:
-           return core->IsCGB() ? 0x8000 : 0x2000;
+           return target->IsCGB() ? 0x8000 : 0x2000;
     }
 
     return 0;
@@ -1143,20 +1416,24 @@ size_t retro_get_memory_size(unsigned id)
 
 static void apply_cheats(void)
 {
-    core->ClearCheats();
-
-    for (size_t i = 0; i < libretro_cheats.size(); i++)
+    for (unsigned i = 0; i < instance_count; i++)
     {
-        if (!libretro_cheats[i].empty())
-            core->SetCheat(libretro_cheats[i].c_str());
+        instances[i].core->ClearCheats();
+
+        for (size_t j = 0; j < libretro_cheats.size(); j++)
+        {
+            if (!libretro_cheats[j].empty())
+                instances[i].core->SetCheat(libretro_cheats[j].c_str());
+        }
     }
 }
 
 static void clear_cheats(void)
 {
     libretro_cheats.clear();
-    if (IsValidPointer(core))
-        core->ClearCheats();
+
+    for (unsigned i = 0; i < instance_count; i++)
+        instances[i].core->ClearCheats();
 }
 
 void retro_cheat_reset(void)

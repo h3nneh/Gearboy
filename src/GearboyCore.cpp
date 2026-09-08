@@ -189,22 +189,8 @@ bool GearboyCore::RunToVBlank(u16* pFrameBuffer, s16* pSampleBuffer, int* pSampl
 
         do
         {
-            unsigned int clockCycles = m_pProcessor->RunFor(1);
-            unsigned int cpuClockCycles = clockCycles;
-
-            m_master_clock_cycles += cpuClockCycles;
-            m_link_cable_cycles += cpuClockCycles;
-
-            m_pProcessor->UpdateTimers(clockCycles);
-            m_pProcessor->UpdateSerial(clockCycles, m_link_cable_cycles);
-
-            vblank = m_pVideo->Tick(clockCycles, pFrameBuffer, m_pixelFormat);
-            m_master_clock_cycles += clockCycles - cpuClockCycles;
-            m_link_cable_cycles += clockCycles - cpuClockCycles;
-            m_pAudio->Tick(clockCycles);
-            m_pInput->Tick(clockCycles);
-            m_pMBC3MemoryRule->Tick(clockCycles);
-            SynchronizeLinkCable();
+            unsigned int clockCycles;
+            vblank = RunCycle(pFrameBuffer, clockCycles);
             totalClocks += clockCycles;
 
             if (debug_enable)
@@ -227,14 +213,7 @@ bool GearboyCore::RunToVBlank(u16* pFrameBuffer, s16* pSampleBuffer, int* pSampl
         }
         while (!vblank);
 
-        m_pAudio->EndFrame(pSampleBuffer, pSampleCount);
-
-        m_iRTCUpdateCount++;
-        if (m_iRTCUpdateCount == 20)
-        {
-            m_iRTCUpdateCount = 0;
-            m_pCartridge->UpdateCurrentRTC();
-        }
+        EndFrame(pSampleBuffer, pSampleCount);
 
         if (render)
         {
@@ -252,26 +231,12 @@ bool GearboyCore::RunToVBlank(u16* pFrameBuffer, s16* pSampleBuffer, int* pSampl
 
         do
         {
+            unsigned int clockCycles;
             #ifdef PERFORMANCE
-                unsigned int clockCycles = m_pProcessor->RunFor(75);
+                vblank = RunCycle(pFrameBuffer, clockCycles, 75);
             #else
-                unsigned int clockCycles = m_pProcessor->RunFor(1);
+                vblank = RunCycle(pFrameBuffer, clockCycles);
             #endif
-            unsigned int cpuClockCycles = clockCycles;
-
-            m_master_clock_cycles += cpuClockCycles;
-            m_link_cable_cycles += cpuClockCycles;
-
-            m_pProcessor->UpdateTimers(clockCycles);
-            m_pProcessor->UpdateSerial(clockCycles, m_link_cable_cycles);
-
-            vblank = m_pVideo->Tick(clockCycles, pFrameBuffer, m_pixelFormat);
-            m_master_clock_cycles += clockCycles - cpuClockCycles;
-            m_link_cable_cycles += clockCycles - cpuClockCycles;
-            m_pAudio->Tick(clockCycles);
-            m_pInput->Tick(clockCycles);
-            m_pMBC3MemoryRule->Tick(clockCycles);
-            SynchronizeLinkCable();
             totalClocks += clockCycles;
 
             if (totalClocks > GAMEBOY_CLOCKS_SAFE_LIMIT)
@@ -279,14 +244,7 @@ bool GearboyCore::RunToVBlank(u16* pFrameBuffer, s16* pSampleBuffer, int* pSampl
         }
         while (!vblank);
 
-        m_pAudio->EndFrame(pSampleBuffer, pSampleCount);
-
-        m_iRTCUpdateCount++;
-        if (m_iRTCUpdateCount == 20)
-        {
-            m_iRTCUpdateCount = 0;
-            m_pCartridge->UpdateCurrentRTC();
-        }
+        EndFrame(pSampleBuffer, pSampleCount);
 
         if (render)
         {
@@ -299,6 +257,16 @@ bool GearboyCore::RunToVBlank(u16* pFrameBuffer, s16* pSampleBuffer, int* pSampl
     }
 
     return breakpoint_result;
+}
+
+void GearboyCore::EndFrame(s16* sample_buffer, int* sample_count)
+{
+    m_pAudio->EndFrame(sample_buffer, sample_count);
+    if (++m_iRTCUpdateCount == 20)
+    {
+        m_iRTCUpdateCount = 0;
+        m_pCartridge->UpdateCurrentRTC();
+    }
 }
 
 bool GearboyCore::LoadROM(const char* szFilePath, bool forceDMG,
@@ -1358,6 +1326,22 @@ bool GearboyCore::GetSaveStateScreenshot(int index, const char* path, GB_SaveSta
     stream.close();
 
     return true;
+}
+
+void GearboyCore::SaveLinkCableState(std::ostream& stream)
+{
+    stream.write(reinterpret_cast<const char*>(&m_master_clock_cycles), sizeof(m_master_clock_cycles));
+    stream.write(reinterpret_cast<const char*>(&m_link_cable_cycles), sizeof(m_link_cable_cycles));
+    stream.write(reinterpret_cast<const char*>(&m_iRTCUpdateCount), sizeof(m_iRTCUpdateCount));
+    m_pProcessor->SaveLinkCableState(stream);
+}
+
+void GearboyCore::LoadLinkCableState(std::istream& stream)
+{
+    stream.read(reinterpret_cast<char*>(&m_master_clock_cycles), sizeof(m_master_clock_cycles));
+    stream.read(reinterpret_cast<char*>(&m_link_cable_cycles), sizeof(m_link_cable_cycles));
+    stream.read(reinterpret_cast<char*>(&m_iRTCUpdateCount), sizeof(m_iRTCUpdateCount));
+    m_pProcessor->LoadLinkCableState(stream);
 }
 
 void GearboyCore::SetCheat(const char* szCheat)

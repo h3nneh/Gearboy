@@ -458,6 +458,12 @@ void Processor::GetSerialState(SerialState& state) const
     state.next_shift_cycle = m_iSerialNextShiftCycle;
 }
 
+void Processor::SetLinkCableIncomingByte(u32 transfer_id, u8 incoming_byte)
+{
+    if (m_bSerialTransferActive && m_bSerialInternalClock && m_iSerialTransferId == transfer_id)
+        m_iSerialIncomingByte = incoming_byte;
+}
+
 void Processor::PublishSerialState(u64 cycle)
 {
     if (m_bLinkCableConnected && m_link_cable_state_callback)
@@ -1395,6 +1401,29 @@ void Processor::CheckMemoryBreakpoints(int type, u16 address, bool read)
 #endif
 }
 
+void Processor::SetGameSharkCheat(const char* szCheat)
+{
+    std::string code(szCheat);
+    for (std::string::iterator p = code.begin(); code.end() != p; ++p)
+        *p = toupper(*p);
+
+    if (code.length() == 8)
+    {
+        GameSharkCode gsc;
+
+        gsc.type = AsHex(code[0]) << 4 | AsHex(code[1]);
+        gsc.value = (AsHex(code[2]) << 4 | AsHex(code[3])) & 0xFF;
+        gsc.address = (AsHex(code[4]) << 4 | AsHex(code[5]) | AsHex(code[6]) << 12 | AsHex(code[7]) << 8) & 0xFFFF;
+
+        m_GameSharkList.push_back(gsc);
+    }
+}
+
+void Processor::ClearGameSharkCheats()
+{
+    m_GameSharkList.clear();
+}
+
 void Processor::SaveState(std::ostream& stream)
 {
     using namespace std;
@@ -1487,27 +1516,54 @@ void Processor::LoadState(std::istream& stream)
     }
 }
 
-void Processor::SetGameSharkCheat(const char* szCheat)
+void Processor::SaveLinkCableState(std::ostream& stream)
 {
-    std::string code(szCheat);
-    for (std::string::iterator p = code.begin(); code.end() != p; ++p)
-        *p = toupper(*p);
-
-    if (code.length() == 8)
-    {
-        GameSharkCode gsc;
-
-        gsc.type = AsHex(code[0]) << 4 | AsHex(code[1]);
-        gsc.value = (AsHex(code[2]) << 4 | AsHex(code[3])) & 0xFF;
-        gsc.address = (AsHex(code[4]) << 4 | AsHex(code[5]) | AsHex(code[6]) << 12 | AsHex(code[7]) << 8) & 0xFFFF;
-
-        m_GameSharkList.push_back(gsc);
-    }
+    stream.write(reinterpret_cast<const char*>(&m_iSerialBit), sizeof(m_iSerialBit));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialCycles), sizeof(m_iSerialCycles));
+    stream.write(reinterpret_cast<const char*>(&m_bSerialTransferActive), sizeof(m_bSerialTransferActive));
+    stream.write(reinterpret_cast<const char*>(&m_bSerialWaitingExternal), sizeof(m_bSerialWaitingExternal));
+    stream.write(reinterpret_cast<const char*>(&m_bSerialInternalClock), sizeof(m_bSerialInternalClock));
+    stream.write(reinterpret_cast<const char*>(&m_bSerialControlWritePending), sizeof(m_bSerialControlWritePending));
+    stream.write(reinterpret_cast<const char*>(&m_bSerialDataWritePending), sizeof(m_bSerialDataWritePending));
+    stream.write(reinterpret_cast<const char*>(&m_bSerialRestorePending), sizeof(m_bSerialRestorePending));
+    stream.write(reinterpret_cast<const char*>(&m_bSerialBytesValid), sizeof(m_bSerialBytesValid));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialPendingControl), sizeof(m_iSerialPendingControl));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialPendingData), sizeof(m_iSerialPendingData));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialIncomingByte), sizeof(m_iSerialIncomingByte));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialOutgoingByte), sizeof(m_iSerialOutgoingByte));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialDividerOffset), sizeof(m_iSerialDividerOffset));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialBitCycles), sizeof(m_iSerialBitCycles));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialTransferId), sizeof(m_iSerialTransferId));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialRequestCycle), sizeof(m_iSerialRequestCycle));
+    stream.write(reinterpret_cast<const char*>(&m_iSerialNextShiftCycle), sizeof(m_iSerialNextShiftCycle));
+    stream.write(reinterpret_cast<const char*>(&m_bLinkCableConnected), sizeof(m_bLinkCableConnected));
+    stream.write(reinterpret_cast<const char*>(&m_iLinkCableNextSyncCycle), sizeof(m_iLinkCableNextSyncCycle));
+    stream.write(reinterpret_cast<const char*>(&m_iLinkCableSyncCycles), sizeof(m_iLinkCableSyncCycles));
 }
 
-void Processor::ClearGameSharkCheats()
+void Processor::LoadLinkCableState(std::istream& stream)
 {
-    m_GameSharkList.clear();
+    stream.read(reinterpret_cast<char*>(&m_iSerialBit), sizeof(m_iSerialBit));
+    stream.read(reinterpret_cast<char*>(&m_iSerialCycles), sizeof(m_iSerialCycles));
+    stream.read(reinterpret_cast<char*>(&m_bSerialTransferActive), sizeof(m_bSerialTransferActive));
+    stream.read(reinterpret_cast<char*>(&m_bSerialWaitingExternal), sizeof(m_bSerialWaitingExternal));
+    stream.read(reinterpret_cast<char*>(&m_bSerialInternalClock), sizeof(m_bSerialInternalClock));
+    stream.read(reinterpret_cast<char*>(&m_bSerialControlWritePending), sizeof(m_bSerialControlWritePending));
+    stream.read(reinterpret_cast<char*>(&m_bSerialDataWritePending), sizeof(m_bSerialDataWritePending));
+    stream.read(reinterpret_cast<char*>(&m_bSerialRestorePending), sizeof(m_bSerialRestorePending));
+    stream.read(reinterpret_cast<char*>(&m_bSerialBytesValid), sizeof(m_bSerialBytesValid));
+    stream.read(reinterpret_cast<char*>(&m_iSerialPendingControl), sizeof(m_iSerialPendingControl));
+    stream.read(reinterpret_cast<char*>(&m_iSerialPendingData), sizeof(m_iSerialPendingData));
+    stream.read(reinterpret_cast<char*>(&m_iSerialIncomingByte), sizeof(m_iSerialIncomingByte));
+    stream.read(reinterpret_cast<char*>(&m_iSerialOutgoingByte), sizeof(m_iSerialOutgoingByte));
+    stream.read(reinterpret_cast<char*>(&m_iSerialDividerOffset), sizeof(m_iSerialDividerOffset));
+    stream.read(reinterpret_cast<char*>(&m_iSerialBitCycles), sizeof(m_iSerialBitCycles));
+    stream.read(reinterpret_cast<char*>(&m_iSerialTransferId), sizeof(m_iSerialTransferId));
+    stream.read(reinterpret_cast<char*>(&m_iSerialRequestCycle), sizeof(m_iSerialRequestCycle));
+    stream.read(reinterpret_cast<char*>(&m_iSerialNextShiftCycle), sizeof(m_iSerialNextShiftCycle));
+    stream.read(reinterpret_cast<char*>(&m_bLinkCableConnected), sizeof(m_bLinkCableConnected));
+    stream.read(reinterpret_cast<char*>(&m_iLinkCableNextSyncCycle), sizeof(m_iLinkCableNextSyncCycle));
+    stream.read(reinterpret_cast<char*>(&m_iLinkCableSyncCycles), sizeof(m_iLinkCableSyncCycles));
 }
 
 Processor::ProcessorState* Processor::GetState()

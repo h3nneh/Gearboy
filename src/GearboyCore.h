@@ -23,6 +23,12 @@
 #include "definitions.h"
 #include "Cartridge.h"
 #include "link_cable.h"
+#include "Memory.h"
+#include "Processor.h"
+#include "Video.h"
+#include "Audio.h"
+#include "Input.h"
+#include "MBC3MemoryRule.h"
 
 class Memory;
 class Processor;
@@ -70,6 +76,10 @@ public:
     GearboyCore();
     ~GearboyCore();
     void Init(GB_Color_Format pixelFormat = GB_PIXEL_RGB565);
+    INLINE bool RunCycle(u16* frame_buffer, unsigned int& clock_cycles, u8 ticks = 1);
+    void EndFrame(s16* sample_buffer, int* sample_count);
+    void SaveLinkCableState(std::ostream& stream);
+    void LoadLinkCableState(std::istream& stream);
     bool RunToVBlank(u16* pFrameBuffer, s16* pSampleBuffer, int* pSampleCount, bool bDMGbuffer = false, GB_Debug_Run* debug = NULL, bool render = true);
     bool LoadROM(const char* szFilePath, bool forceDMG,
         Cartridge::CartridgeTypes forceType = Cartridge::CartridgeNotSupported,
@@ -191,5 +201,30 @@ private:
     u64 m_master_clock_cycles;
     u64 m_link_cable_cycles;
 };
+
+INLINE bool GearboyCore::RunCycle(u16* frame_buffer, unsigned int& clocks, u8 ticks)
+{
+    clocks = m_pProcessor->RunFor(ticks);
+
+    unsigned int cpu_clocks = clocks;
+    m_master_clock_cycles += clocks;
+    m_link_cable_cycles += clocks;
+
+    m_pProcessor->UpdateTimers(clocks);
+    m_pProcessor->UpdateSerial(clocks, m_link_cable_cycles);
+
+    bool vblank = m_pVideo->Tick(clocks, frame_buffer, m_pixelFormat);
+
+    m_master_clock_cycles += clocks - cpu_clocks;
+    m_link_cable_cycles += clocks - cpu_clocks;
+
+    m_pAudio->Tick(clocks);
+    m_pInput->Tick(clocks);
+    m_pMBC3MemoryRule->Tick(clocks);
+
+    SynchronizeLinkCable();
+
+    return vblank;
+}
 
 #endif /* CORE_H */

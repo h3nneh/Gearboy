@@ -18,29 +18,29 @@ This server provides tools for game development, rom hacking, reverse engineerin
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-mcpb-windows-x64.mcpb">Gearboy-3.8.14-mcpb-windows-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-mcpb-windows-x64.mcpb">Gearboy-3.8.15-mcpb-windows-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-mcpb-windows-arm64.mcpb">Gearboy-3.8.14-mcpb-windows-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-mcpb-windows-arm64.mcpb">Gearboy-3.8.15-mcpb-windows-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>macOS</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-mcpb-macos-x64.mcpb">Gearboy-3.8.14-mcpb-macos-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-mcpb-macos-x64.mcpb">Gearboy-3.8.15-mcpb-macos-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-mcpb-macos-arm64.mcpb">Gearboy-3.8.14-mcpb-macos-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-mcpb-macos-arm64.mcpb">Gearboy-3.8.15-mcpb-macos-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>Linux</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-mcpb-linux-x64.mcpb">Gearboy-3.8.14-mcpb-linux-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-mcpb-linux-x64.mcpb">Gearboy-3.8.15-mcpb-linux-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-mcpb-linux-arm64.mcpb">Gearboy-3.8.14-mcpb-linux-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-mcpb-linux-arm64.mcpb">Gearboy-3.8.15-mcpb-linux-arm64.mcpb</a></td>
     </tr>
   </tbody>
 </table>
@@ -363,7 +363,7 @@ The server exposes tools organized in the following categories:
 - `list_memory_watches` - List all watches in memory area
 - `memory_search_capture` - Capture memory snapshot for search comparison
 - `memory_search` - Search memory with operators (<, >, ==, !=, <=, >=), compare types (previous, value, address), and data types (hex, signed, unsigned)
-- `memory_find_bytes` - Find byte sequences in memory
+- `memory_find` - Find hex byte sequences (`hex_bytes`) or text (`text`, optional `case_sensitive`) in memory
 
 ### Disassembly & Debugging
 - `get_disassembly` - Get SM83 disassembly for specified address range

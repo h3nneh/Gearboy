@@ -30,11 +30,11 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>Desktop x64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-desktop-windows-x64.zip">Gearboy-3.8.14-desktop-windows-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-desktop-windows-x64.zip">Gearboy-3.8.15-desktop-windows-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-desktop-windows-arm64.zip">Gearboy-3.8.14-desktop-windows-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-desktop-windows-arm64.zip">Gearboy-3.8.15-desktop-windows-arm64.zip</a></td>
     </tr>
     <tr>
       <td rowspan="3"><strong>macOS</strong></td>
@@ -43,11 +43,11 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     </tr>
     <tr>
       <td>Desktop Apple Silicon</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-desktop-macos-arm64.zip">Gearboy-3.8.14-desktop-macos-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-desktop-macos-arm64.zip">Gearboy-3.8.15-desktop-macos-arm64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Intel</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-desktop-macos-intel.zip">Gearboy-3.8.14-desktop-macos-intel.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-desktop-macos-intel.zip">Gearboy-3.8.15-desktop-macos-intel.zip</a></td>
     </tr>
     <tr>
       <td rowspan="5"><strong>Linux</strong></td>
@@ -60,15 +60,15 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     </tr>
     <tr>
       <td>Desktop Ubuntu 24.04 x64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-desktop-ubuntu24.04-x64.zip">Gearboy-3.8.14-desktop-ubuntu24.04-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-desktop-ubuntu24.04-x64.zip">Gearboy-3.8.15-desktop-ubuntu24.04-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 22.04 x64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-desktop-ubuntu22.04-x64.zip">Gearboy-3.8.14-desktop-ubuntu22.04-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-desktop-ubuntu22.04-x64.zip">Gearboy-3.8.15-desktop-ubuntu22.04-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 24.04 ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.14/Gearboy-3.8.14-desktop-ubuntu24.04-arm64.zip">Gearboy-3.8.14-desktop-ubuntu24.04-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearboy/releases/download/3.8.15/Gearboy-3.8.15-desktop-ubuntu24.04-arm64.zip">Gearboy-3.8.15-desktop-ubuntu24.04-arm64.zip</a></td>
     </tr>
     <tr>
       <td><strong>MCPB</strong></td>
@@ -98,7 +98,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Supported cartridges: ROM, ROM + RAM, MBC1, MBC2, MBC3, MBC5, MBC6, MBC7, HuC-1, HuC-3, MMM01, Pocket Camera, TAMA5, MBC1M, Wisdom Tree, M161, Sachen MMC1, Sachen MMC2 and PKJD.
 - Game Boy Color support.
 - Super Game Boy support.
-- Local two-instance Game Boy link cable support on desktop platforms.
+- Local two-instance Game Boy link cable support on desktop platforms and libretro core.
 - LCD screen ghosting effect as seen in the original Game Boy.
 - LCD dot matrix effects. 
 - Battery powered RAM save support.
