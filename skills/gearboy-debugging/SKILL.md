@@ -28,7 +28,7 @@ Debug Game Boy, Game Boy Color, and Super Game Boy games using the Gearboy emula
 
 ## MCP Server Prerequisite
 
-**IMPORTANT — Check before installing:** Before attempting any installation or configuration, you MUST first verify if the Gearboy MCP server is already connected in your current session. In the default mode, call `debug_get_status` directly. If Gearboy was intentionally started with `--mcp-router`, call `get_tool_info` with `{"name":"debug_get_status"}`, then call `execute_tool` with `{"name":"debug_get_status","arguments":{}}`. A valid response from either workflow means the server is active and ready.
+**Check before installing:** the Gearboy MCP server is often already connected, so verify that before any installation or configuration. In the default mode, call `debug_get_status` directly. If Gearboy was intentionally started with `--mcp-router`, call `get_tool_info` with `{"name":"debug_get_status"}`, then call `execute_tool` with `{"name":"debug_get_status","arguments":{}}`. A valid response from either workflow means the server is active and ready.
 
 Only if neither workflow is available or the call fails, you need to help install and configure the Gearboy MCP server:
 
