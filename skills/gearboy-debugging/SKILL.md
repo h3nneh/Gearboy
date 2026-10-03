@@ -117,7 +117,7 @@ After each step, call `get_cpu_status` and `get_disassembly` to see where you ar
 
 ### 5. Trace Execution
 
-The trace logger records CPU instructions interleaved with hardware events (LCD, APU, I/O, bank switching). Start the trace logger from the emulator's debugger window, then:
+The trace logger records CPU instructions interleaved with hardware events (LCD, APU, I/O, bank switching). `set_trace_log` starts and stops it:
 
 1. `set_trace_log` with `enabled: true` to start recording (optionally filter event types)
 2. Let the game run or step through code
@@ -246,7 +246,7 @@ The Game Boy interrupt vectors are at fixed addresses: VBlank=$0040, LCD STAT=$0
 ### Timing Analysis
 
 1. `toggle_irq_breakpoints` to break on Timer or VBlank
-2. Start the trace logger from the debugger window
+2. `set_trace_log` with `enabled: true` to start recording
 3. `get_trace_log` to see the interleaved CPU + hardware events
 4. `get_lcd_registers` to check timer and LCD timing configuration
 5. Correlate interrupt fires with code execution in the trace
