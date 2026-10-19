@@ -101,3 +101,6 @@ platforms/libretro/libs/
 
 #JetBrains
 .idea
+
+# gebaute Test-Programme
+tests/gearboy-*-tests

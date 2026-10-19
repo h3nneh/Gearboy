@@ -147,6 +147,18 @@ void application_headless_mainloop(void)
 
         float target_ms = 16.666f;
 
+        if (config_emulator.ffwd)
+        {
+            switch (config_emulator.ffwd_speed)
+            {
+                case 0: target_ms /= 1.5f; break;
+                case 1: target_ms /= 2.0f; break;
+                case 2: target_ms /= 2.5f; break;
+                case 3: target_ms /= 3.0f; break;
+                default: target_ms = 0.0f; break;
+            }
+        }
+
         if (elapsed_ms < target_ms)
             SDL_Delay((Uint32)(target_ms - elapsed_ms));
     }
